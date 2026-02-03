@@ -1,0 +1,438 @@
+name: publish
+
+on:
+  push:
+    branches: [ main, preview ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: html_publisher
+    environment:
+      name: ${{ github.ref_name == 'main' && 'github-pages' || 'preview' }}
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install nbconvert jupyter-book sphinx markdown beautifulsoup4
+
+      - name: Convert notebooks and create single-page app
+        run: |
+          mkdir -p site
+          
+          # Convert .ipynb notebooks to HTML fragments (body content only)
+          for notebook in notebooks/*.ipynb; do
+              if [ -f "$notebook" ]; then
+                  jupyter nbconvert "$notebook" --to html \
+                    --template classic --HTMLExporter.theme=light \
+                    --no-prompt --stdout > "temp_$(basename "$notebook" .ipynb).html"
+              fi
+          done
+          
+          # Convert .py Databricks notebooks to HTML fragments
+          chmod +x .github/scripts/convert_notebooks.py
+          python3 .github/scripts/convert_notebooks.py
+          
+          # Create single-page application with embedded content
+          python3 << 'EOF'
+          import os
+          import json
+          import markdown
+          import re
+          import glob
+          from bs4 import BeautifulSoup
+          
+          # Read README.md
+          readme_content = ""
+          if os.path.exists('README.md'):
+              with open('README.md', 'r') as f:
+                  readme_content = markdown.markdown(f.read())
+          
+          # Get repository name and format title
+          repo_name = os.environ.get('GITHUB_REPOSITORY', '').split('/')[-1]
+          title = ' '.join(word.capitalize() for word in repo_name.split('-')) + ' Accelerator'
+          
+          # Collect all notebook content
+          notebooks = {}
+          
+          # Read .py notebook fragments
+          if os.path.exists('notebook_fragments.json'):
+              with open('notebook_fragments.json', 'r') as f:
+                  py_notebooks = json.load(f)
+                  notebooks.update(py_notebooks)
+          
+          # Read .ipynb notebook content (extract body from temp files)
+          for temp_file in glob.glob('temp_*.html'):
+              if 'fragment' not in temp_file:  # These are the nbconvert outputs
+                  name = temp_file.replace('temp_', '').replace('.html', '')
+                  with open(temp_file, 'r') as f:
+                      content = f.read()
+                  # Extract body content
+                  soup = BeautifulSoup(content, 'html.parser')
+                  body = soup.find('body')
+                  if body:
+                      # Find the notebook container
+                      container = body.find('div', class_='container')
+                      if container:
+                          notebooks[name] = str(container)
+                      else:
+                          notebooks[name] = str(body)
+          
+          # Create single-page application
+          html = f'''<!DOCTYPE html>
+          <html>
+          <head>
+              <title>{title}</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+              <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
+              <style>
+                  * {{ box-sizing: border-box; }}
+                  body {{ 
+                      font-family: 'DM Sans', sans-serif; 
+                      margin: 0; 
+                      padding: 0; 
+                      background: #FFFFFF; 
+                      color: #1B3139; 
+                      line-height: 1.6;
+                  }}
+                  
+                  .header {{ 
+                      background: #FFFFFF; 
+                      padding: 16px 32px; 
+                      border-bottom: 2px solid #FF3621; 
+                      display: flex; 
+                      align-items: center; 
+                      gap: 24px; 
+                      position: fixed; 
+                      top: 0; 
+                      width: 100%; 
+                      z-index: 1000; 
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                  }}
+                  
+                  .logo {{ height: 28px; }}
+                  .title {{ font-size: 20px; font-weight: 700; flex: 1; color: #1B3139; }}
+                  .github-link {{ 
+                      background: #FF3621; 
+                      color: white; 
+                      padding: 8px 16px; 
+                      border-radius: 6px; 
+                      text-decoration: none; 
+                      font-weight: 600; 
+                      font-size: 14px;
+                  }}
+                  
+                  .main-container {{ 
+                      display: flex; 
+                      margin-top: 72px; 
+                      min-height: calc(100vh - 72px); 
+                  }}
+                  
+                  .sidebar {{ 
+                      width: 280px; 
+                      background: #F5F5F5; 
+                      padding: 24px 16px; 
+                      position: fixed; 
+                      left: 0; 
+                      top: 72px; 
+                      height: calc(100vh - 72px); 
+                      overflow-y: auto; 
+                      border-right: 1px solid #E3E3E3; 
+                  }}
+                  
+                  .sidebar h3 {{ 
+                      font-size: 14px; 
+                      font-weight: 600; 
+                      margin: 0 0 16px 8px; 
+                      color: #1B3139; 
+                      text-transform: uppercase; 
+                      letter-spacing: 0.5px; 
+                  }}
+                  
+                  .content {{ 
+                      flex: 1; 
+                      padding: 32px; 
+                      margin-left: 280px; 
+                      background: #FFFFFF; 
+                  }}
+                  
+                  .content-section {{ 
+                      display: none; 
+                      background: #FFFFFF; 
+                      border-radius: 12px; 
+                      border: 1px solid #E3E3E3; 
+                      padding: 32px; 
+                      margin: 0 auto; 
+                      max-width: 1200px; 
+                      box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+                  }}
+                  
+                  .content-section.active {{ display: block; }}
+                  
+                  .nav-link {{ 
+                      display: block; 
+                      padding: 8px 12px; 
+                      margin: 2px 0; 
+                      text-decoration: none; 
+                      color: #1B3139; 
+                      border-radius: 6px; 
+                      font-weight: 500; 
+                      font-size: 14px; 
+                      transition: all 0.2s; 
+                      cursor: pointer;
+                      border-left: 3px solid transparent; 
+                  }}
+                  
+                  .nav-link:hover {{ 
+                      background: #FFFFFF; 
+                      border-left-color: #FF3621; 
+                      transform: translateX(2px); 
+                  }}
+                  
+                  .nav-link.active {{ 
+                      background: #FF3621; 
+                      color: white; 
+                      font-weight: 600; 
+                      border-left-color: #E33417; 
+                  }}
+                  
+                  /* Content containment - prevent overflow */
+                  .content-section {{ 
+                      overflow-x: auto; 
+                      word-wrap: break-word; 
+                      word-break: break-word; 
+                  }}
+                  
+                  .content-section img {{ 
+                      max-width: 100%; 
+                      height: auto; 
+                      display: block; 
+                      margin: 16px auto; 
+                      border-radius: 4px; 
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+                  }}
+                  
+                  .content-section table {{ 
+                      width: 100%; 
+                      max-width: 100%; 
+                      overflow-x: auto; 
+                      display: block; 
+                      white-space: nowrap; 
+                      border-collapse: collapse; 
+                      margin: 16px 0; 
+                  }}
+                  
+                  .content-section pre {{ 
+                      overflow-x: auto; 
+                      max-width: 100%; 
+                      white-space: pre-wrap; 
+                      word-wrap: break-word; 
+                  }}
+                  
+                  /* Notebook styling */
+                  .cell {{ margin: 16px 0; }}
+                  .text_cell_render h1 {{ font-size: 28px; color: #1B3139; font-weight: 600; margin: 24px 0 16px 0; }}
+                  .text_cell_render h2 {{ font-size: 22px; color: #1B3139; font-weight: 600; margin: 20px 0 12px 0; }}
+                  .text_cell_render h3 {{ font-size: 18px; color: #1B3139; font-weight: 600; margin: 16px 0 8px 0; }}
+                  .text_cell_render p {{ margin: 0 0 16px 0; }}
+                  .text_cell_render code {{ 
+                      background: #F5F5F5; 
+                      padding: 2px 6px; 
+                      border-radius: 3px; 
+                      font-family: 'Monaco', 'Consolas', monospace; 
+                  }}
+                  
+                  .input_area, .highlight {{ 
+                      background: #f8f9fa; 
+                      border: 1px solid #E3E3E3; 
+                      border-radius: 8px; 
+                      margin: 8px 0; 
+                      overflow-x: auto; 
+                  }}
+                  
+                  .input_area pre, .highlight pre {{ 
+                      margin: 0; 
+                      padding: 16px; 
+                      background: transparent; 
+                      border: none; 
+                      font-family: 'Monaco', 'Consolas', monospace; 
+                      font-size: 14px; 
+                      overflow-x: auto; 
+                  }}
+                  
+                  /* Syntax highlighting for both .py and .ipynb */
+                  .language-python, .highlight {{ background: transparent !important; }}
+                  
+                  /* Ensure code blocks in nbconvert output get highlighted */
+                  .highlight .highlight {{ background: #f8f9fa !important; border: 1px solid #E3E3E3 !important; }}
+                  
+                  /* Output areas */
+                  .output_area {{ 
+                      margin: 8px 0; 
+                      padding: 8px; 
+                      background: #f8f9fa; 
+                      border-left: 3px solid #FF3621; 
+                      border-radius: 4px; 
+                      overflow-x: auto; 
+                  }}
+                  
+                  /* Mobile responsiveness */
+                  @media (max-width: 768px) {{
+                      .sidebar {{ 
+                          width: 100%; 
+                          height: auto; 
+                          position: relative; 
+                          top: 0; 
+                      }}
+                      .content {{ 
+                          margin-left: 0; 
+                          padding: 16px; 
+                      }}
+                      .main-container {{ flex-direction: column; }}
+                  }}
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <img src="https://databricks-prod-cloudfront.cloud.databricks.com/static/811f68f9f55e3a5330b6e6ae1e54c07fc5ec7224f15be529de3400226e2eca3a/db-nav-logo.svg" 
+                       class="logo" alt="Databricks">
+                  <div class="title">{title}</div>
+                  <a href="{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}" 
+                     class="github-link">View on GitHub</a>
+              </div>
+              
+              <div class="main-container">
+                  <div class="sidebar">
+                      <h3>📚 Documentation</h3>
+                      <div class="nav-link active" onclick="showSection('readme')">Overview</div>'''
+          
+          # Add notebook navigation
+          if notebooks:
+              html += '\n            <h3 style="margin-top: 30px;">📓 Notebooks</h3>'
+              for name in sorted(notebooks.keys()):
+                  display_name = name.replace('_', ' ').title()
+                  html += f'\n            <div class="nav-link" onclick="showSection(\'{name}\')">📓 {display_name}</div>'
+          
+          html += f'''
+                  </div>
+                  
+                  <div class="content">
+                      <!-- README Section -->
+                      <div id="readme" class="content-section active">
+                          {readme_content}
+                      </div>'''
+          
+          # Add notebook sections
+          for name, content in notebooks.items():
+              html += f'''
+                      <!-- {name} Section -->
+                      <div id="{name}" class="content-section">
+                          {content}
+                      </div>'''
+          
+          html += f'''
+                  </div>
+              </div>
+              
+              <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+              <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+              <script>
+                  function showSection(sectionId) {{
+                      // Hide all sections
+                      const sections = document.querySelectorAll('.content-section');
+                      sections.forEach(section => section.classList.remove('active'));
+                      
+                      // Remove active class from all nav links
+                      const navLinks = document.querySelectorAll('.nav-link');
+                      navLinks.forEach(link => link.classList.remove('active'));
+                      
+                      // Show target section
+                      const targetSection = document.getElementById(sectionId);
+                      if (targetSection) {{
+                          targetSection.classList.add('active');
+                          
+                          // Convert nbconvert code blocks to Prism format for highlighting
+                          const codeBlocks = targetSection.querySelectorAll('.highlight pre, .input_area pre');
+                          codeBlocks.forEach(block => {{
+                              if (!block.querySelector('code')) {{
+                                  // Wrap content in code element for Prism
+                                  const code = document.createElement('code');
+                                  code.className = 'language-python';
+                                  code.innerHTML = block.innerHTML;
+                                  block.innerHTML = '';
+                                  block.appendChild(code);
+                              }}
+                          }});
+                      }}
+                      
+                      // Add active class to clicked nav link
+                      event.target.classList.add('active');
+                      
+                      // Highlight all code blocks including newly formatted ones
+                      setTimeout(() => {{
+                          Prism.highlightAll();
+                      }}, 10);
+                  }}
+                  
+                  // Initialize syntax highlighting on load
+                  document.addEventListener('DOMContentLoaded', function() {{
+                      // Process all existing code blocks on page load
+                      const allCodeBlocks = document.querySelectorAll('.highlight pre, .input_area pre');
+                      allCodeBlocks.forEach(block => {{
+                          if (!block.querySelector('code')) {{
+                              const code = document.createElement('code');
+                              code.className = 'language-python';
+                              code.innerHTML = block.innerHTML;
+                              block.innerHTML = '';
+                              block.appendChild(code);
+                          }}
+                      }});
+                      
+                      Prism.highlightAll();
+                  }});
+              </script>
+          </body>
+          </html>'''
+          
+          # Write the single-page application
+          with open('site/index.html', 'w') as f:
+              f.write(html)
+          
+          print(f"Created single-page application with {len(notebooks)} notebooks")
+          
+          # Clean up temporary files
+          for temp_file in glob.glob('temp_*.html'):
+              os.remove(temp_file)
+          if os.path.exists('notebook_fragments.json'):
+              os.remove('notebook_fragments.json')
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

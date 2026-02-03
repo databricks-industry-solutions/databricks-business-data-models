@@ -1,0 +1,117 @@
+name: Databricks Asset Bundles CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-and-test:
+    runs-on: html_publisher
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Databricks CLI
+        uses: databricks/setup-cli@main
+        env:
+          DATABRICKS_HOST: 'https://e2-demo-field-eng.cloud.databricks.com'
+          DATABRICKS_TOKEN: ${{ secrets.DEPLOY_NOTEBOOK_TOKEN }}
+
+      - name: Configure Databricks CLI authentication
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = https://e2-demo-field-eng.cloud.databricks.com" >> ~/.databrickscfg
+          echo "token = ${{ secrets.DEPLOY_NOTEBOOK_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Get or Create serverless SQL warehouse
+        env:
+          DATABRICKS_HOST: 'https://e2-demo-field-eng.cloud.databricks.com'
+          DATABRICKS_TOKEN: ${{ secrets.DEPLOY_NOTEBOOK_TOKEN }}
+        run: |
+          WAREHOUSE_NAME="Shared Unity Catalog Serverless"
+          echo "Looking for warehouse named: $WAREHOUSE_NAME"
+          
+          echo "Fetching existing warehouses..."
+          EXISTING_WAREHOUSE=$(curl -s -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+            "$DATABRICKS_HOST/api/2.0/sql/warehouses")
+          
+          echo "Warehouse List Response: $(echo $EXISTING_WAREHOUSE | sed 's/\"token\":\"[^\"]*\"/\"token\":\"***\"/g')"
+          
+          WAREHOUSE_ID=$(echo "$EXISTING_WAREHOUSE" | python3 -c "
+          import sys, json
+          import argparse
+
+          parser = argparse.ArgumentParser()
+          parser.add_argument('--name', required=True)
+          args = parser.parse_args()
+
+          try:
+              data = json.load(sys.stdin)
+              name = args.name
+              if 'warehouses' in data:
+                  warehouses = data['warehouses']
+                  matching = [w for w in warehouses if w['name'] == name]
+                  if matching:
+                      print(matching[0]['id'])
+                  else:
+                      print('')
+              else:
+                  print('')
+          except Exception as e:
+              print(f'Error parsing response: {str(e)}', file=sys.stderr)
+              print('')
+          " --name "$WAREHOUSE_NAME")
+          
+          if [ -z "$WAREHOUSE_ID" ]; then
+            echo "Creating new warehouse..."
+            RESPONSE=$(curl -s -X POST -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$DATABRICKS_HOST/api/2.0/sql/warehouses" \
+              -d "{
+                \"name\": \"${WAREHOUSE_NAME}\",
+                \"cluster_size\": \"2X-Small\",
+                \"enable_serverless_compute\": true,
+                \"auto_stop_mins\": 10,
+                \"max_num_clusters\": 1
+              }")
+            
+            echo "Create API Response: $(echo $RESPONSE | sed 's/\"token\":\"[^\"]*\"/\"token\":\"***\"/g')"
+            WAREHOUSE_ID=$(echo $RESPONSE | python3 -c "import sys, json; print(json.load(sys.stdin).get('id', ''))")
+          else
+            echo "Found existing warehouse with ID: $WAREHOUSE_ID"
+          fi
+          
+          if [ -z "$WAREHOUSE_ID" ]; then
+            echo "Error: Failed to get warehouse ID"
+            exit 1
+          fi
+          
+          echo "Using warehouse with ID: $WAREHOUSE_ID"
+          echo "WAREHOUSE_ID=$WAREHOUSE_ID" >> $GITHUB_ENV
+          # Set default environment to dev
+          echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
+
+      - name: Validate bundle
+        run: databricks bundle validate --var="environment=${{ env.DEPLOY_ENV }}"
+
+      - name: Deploy workflow
+        run: databricks bundle deploy --var="environment=${{ env.DEPLOY_ENV }}"        
+
+      - name: Run and monitor workflow
+        run: |
+          echo "Starting workflow execution..."
+          databricks bundle run demo_workflow --target dev --var="environment=${{ env.DEPLOY_ENV }}"
+
+      - name: Cleanup PR deployment
+        run: |
+          databricks bundle destroy --target dev --var="environment=${{ env.DEPLOY_ENV }}" || true

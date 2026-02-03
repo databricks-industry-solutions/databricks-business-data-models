@@ -1,0 +1,1 @@
+# Check here to get the latest version of the databricks-cli: https://github.com/databricks/cli
