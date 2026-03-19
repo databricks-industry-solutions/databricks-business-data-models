@@ -6,7 +6,7 @@ The Field Engineering (FE) Data Modeling project (tracked under FEIP-1812) was e
 The project focuses on creating UC-ready industry data models, ETL mappings, and semantic layers that allow field teams to demonstrate how Databricks can map real customer data to industry standards.
 
 ## Primary Objectives
-**Standardization:** Ship unified data models (Bronze → Silver → Gold) for key industries to compete effectively against platforms like Snowflake and Microsoft Fabric.
+**Standardization:** Ship unified data models (Bronze → Silver → Gold) for key industries to accelerate our customer's projects.
 
 **AI-Enhanced Accuracy:** Leverage a "Data Intelligence" approach where well-structured models reduce token usage and increase the accuracy of AI-generated responses.
 
