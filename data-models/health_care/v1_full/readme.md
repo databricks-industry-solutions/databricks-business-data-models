@@ -1,4 +1,4 @@
-# Lakehouse  health Care Data Model
+# Lakehouse  Health Care Data Model
 
 This document outlines a canonical data model for the  health Care business, designed for a Lakehouse architecture. The model is structured into business-aligned domains and denormalized data products, optimized for analytical workloads.
 
