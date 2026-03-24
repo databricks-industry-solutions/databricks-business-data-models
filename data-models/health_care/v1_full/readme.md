@@ -591,9 +591,9 @@ v1/
 
 | Folder | Contents |
 |---|---|
-| `schemas/` | `united_health_care_domains_v1.sql`, `united_health_care_products_v1.sql`, `united_health_care_foreign_keys_v1.sql`, `united_health_care_tags_v1.sql` |
-| `metrics/` | `united_health_care_<domain>_metrics_v1.sql` (one file per domain) |
-| `docs/` | `united_health_care_model_v1.xlsx`, `united_health_care_model_v1.csv`, `united_health_care_data_model_v1.json`, `united_health_care_dbml_v1.txt` |
-| `vibes/` | `united_health_care_business_context.json`, `united_health_care_next_vibes.json`, `united_health_care_ai_logs_v1.log` |
-| `ontology/` | `united_health_care_rdf_v1.ttl` |
+| `schemas/` | `health_care_domains_v1.sql`, `health_care_products_v1.sql`, `health_care_foreign_keys_v1.sql`, `health_care_tags_v1.sql` |
+| `metrics/` | `health_care_<domain>_metrics_v1.sql` (one file per domain) |
+| `docs/` | `health_care_model_v1.xlsx`, `health_care_model_v1.csv`, `health_care_data_model_v1.json`, `health_care_dbml_v1.txt` |
+| `vibes/` | `health_care_business_context.json`, `health_care_next_vibes.json`, `health_care_ai_logs_v1.log` |
+| `ontology/` | `health_care_rdf_v1.ttl` |
 | `samples/` | One CSV file per data product (e.g., `customer.csv`, `order.csv`) |
