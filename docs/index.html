@@ -648,6 +648,23 @@
 
   .bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
   .bar i{display:block;height:100%;background:var(--brand);transition:width .18s ease-out}
+
+  .tour-hole{position:fixed;border-radius:10px;pointer-events:none;z-index:6000;
+    box-shadow:0 0 0 3px var(--brand),0 0 0 9999px rgba(0,0,0,.55);
+    transition:top .25s cubic-bezier(.4,0,.2,1),left .25s cubic-bezier(.4,0,.2,1),
+      width .25s cubic-bezier(.4,0,.2,1),height .25s cubic-bezier(.4,0,.2,1)}
+  .tour-pop{position:fixed;z-index:6001;width:304px;max-width:calc(100vw - 24px);
+    background:var(--card);color:var(--ink);border:1px solid var(--line-strong);
+    border-radius:14px;box-shadow:var(--shadow-xl);padding:15px 16px 11px}
+  .tour-pop h4{margin:0 0 6px;font-size:14px;font-weight:750;color:var(--ink)}
+  .tour-pop p{margin:0 0 13px;font-size:12.5px;line-height:1.55;color:var(--muted)}
+  .tour-pop kbd{background:var(--well);border:1px solid var(--line-strong);border-radius:5px;
+    padding:0 5px;font-size:11px;font-family:inherit}
+  .tour-row{display:flex;align-items:center;gap:8px}
+  .tour-step{font-size:11px;color:var(--faint);margin-right:auto;letter-spacing:.02em}
+  .tour-skip{background:transparent;border:0;color:var(--faint);cursor:pointer;
+    font:inherit;font-size:12px;padding:6px 4px}
+  .tour-skip:hover{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -663,7 +680,7 @@
 /* ─────────────────────────────────────────────────────────
    MODEL VIEWER - React + Cytoscape.js
    ─────────────────────────────────────────────────────── */
-const {useState,useEffect,useRef,useCallback,useMemo,memo} = React;
+const {useState,useEffect,useLayoutEffect,useRef,useCallback,useMemo,memo} = React;
 const h = React.createElement;
 
 // ── Constants ─────────────────────────────────────────────
@@ -1807,7 +1824,7 @@ function ThemeControls({theme,onTheme,palette,onPalette}){
     document.addEventListener('keydown',esc);
     return ()=>{document.removeEventListener('mousedown',away);document.removeEventListener('keydown',esc);};
   },[open]);
-  return h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+  return h('div',{'data-tour':'theme',style:{display:'flex',alignItems:'center',gap:6}},
     h('button',{className:'iconbtn',title:theme==='dark'?'Switch to light':'Switch to dark',
       'aria-label':'Toggle colour theme',
       onClick:()=>onTheme(theme==='dark'?'light':'dark')},theme==='dark'?'☀':'☾'),
@@ -1891,7 +1908,7 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
       // point at) renders the same element as a plain span.
       modelLabel&&h(React.Fragment,null,
         h('span',{className:'vrule'}),
-        h(modelDirUrl?'a':'span',{className:'modelname',
+        h(modelDirUrl?'a':'span',{className:'modelname','data-tour':'repo',
             title:modelDirUrl
               ?`${modelLabel} on GitHub — readme, docs, metrics and diagram`
               :modelLabel,
@@ -1924,7 +1941,7 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
 
     // Searchable industry menu, then the rest of the controls.
     h('div',{className:'topbar-end'},
-      gallery&&h('button',{className:'btn',disabled:!canDownload,
+      gallery&&h('button',{className:'btn','data-tour':'download',disabled:!canDownload,
           title:localModel?'Download is not available for uploaded JSON models'
             :!industry?'Choose an industry to download its Excel workbook'
             :`Download ${industry.display} ${entry.version.toUpperCase()} ${entry.flavour.toUpperCase()} Excel workbook`,
@@ -1934,19 +1951,19 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
               .catch(()=>window.open(xlsxUrl,'_blank','noopener'));
           }},
         'Download'),
-      gallery&&h('button',{className:'indpick',onClick:onJump,title:jumpHint,
+      gallery&&h('button',{className:'indpick','data-tour':'industry',onClick:onJump,title:jumpHint,
           'aria-haspopup':'dialog'},
         h('span',{style:{color:'var(--muted)',flexShrink:0}},'⌕'),
         h('span',{className:'indpick-name'},industry?industry.display:'Choose industry'),
         industry&&h('span',{className:'indpick-sec'},industry.section),
         h('span',{className:'indpick-caret'},'▾')
       ),
-      gallery&&onLoadJson&&h('div',{className:'loador'},
+      gallery&&onLoadJson&&h('div',{className:'loador','data-tour':'loadjson'},
         h('span',{className:'loador-sep'},'OR'),
         h(LoadJsonButton,{onFile:onLoadJson})
       ),
       !gallery&&onLoadJson&&h(LoadJsonButton,{onFile:onLoadJson}),
-      gallery&&h('div',{className:'seg',role:'group','aria-label':'Model flavour'},
+      gallery&&h('div',{className:'seg','data-tour':'flavour',role:'group','aria-label':'Model flavour'},
         FLAVOURS.map(f=>h('button',{key:f.id,title:f.title,
           className:sel.flavour===f.id?'on':'',
           onClick:()=>onSelect({flavour:f.id})},f.label))
@@ -2019,6 +2036,137 @@ function CommandPalette({manifest,onPick,onClose}){
               h('span',null,i.display),
               h('small',null,i.section)
             ))
+      )
+    )
+  );
+}
+
+const TOUR_LS_KEY='dbx-viewer-tour-v1';
+const TOUR_STEPS=[
+  {target:'domains',place:'right',title:'Business domains',
+    body:'The model is grouped into business domains, colour-coded here. Click a domain name to filter the graph down to just that domain, or the + to drill into its tables.'},
+  {target:'graph-node',place:'bottom',title:'Explore the graph',
+    body:'Every circle is a data product (a table). Click one to see its columns and keys in the panel on the right. Double-click to drill into just that table and its foreign-key neighbours.'},
+  {target:'download',place:'bottom',title:'Download the model',
+    body:'Export the whole model as an Excel workbook — every table, column, data type and key — ready to share or hand to your data team.'},
+  {target:'repo',place:'bottom',title:'Open the model & install it',
+    body:'This name links to the model on GitHub: schemas, docs, metric views and the ER diagram. The repo also ships an installer notebook to deploy the model straight into Unity Catalog.'},
+  {target:'industry',place:'bottom',title:'Switch industry',
+    body:'Jump to any of the 40 industry models from here — or press ⌘K / Ctrl-K to search them fast.'},
+  {target:'flavour',place:'bottom',title:'ECM vs MVM',
+    body:'ECM is the full enterprise model; MVM is the leaner, production-ready subset. Toggle to compare the two.'},
+  {target:'loadjson',place:'bottom',title:'Bring your own model',
+    body:'Have your own model.json? Load it and explore it in this same viewer — nothing leaves your browser.'},
+  {target:'theme',place:'bottom',title:'Theme & colours',
+    body:'Switch between light and dark, and pick a colour palette that works for your screen or projector.'}
+];
+
+function Tour({onClose,getNodeRect}){
+  const [index,setIndex]=useState(0);
+  const [hole,setHole]=useState(null);
+  const [pos,setPos]=useState(null);
+  const [tick,setTick]=useState(0);
+  const dirRef=useRef(1);
+  const popRef=useRef(null);
+  const PAD=6, GAP=14, PW=304;
+
+  const rectFor=useCallback(step=>{
+    if(step.target==='graph-node'){
+      const r=getNodeRect&&getNodeRect();
+      if(r&&r.width>0) return r;
+      const el=document.querySelector('[data-tour="graph"]');
+      if(el){
+        const b=el.getBoundingClientRect();
+        const w=Math.min(340,b.width*0.5),hh=Math.min(220,b.height*0.5);
+        return {left:b.left+(b.width-w)/2,top:b.top+(b.height-hh)/2,width:w,height:hh};
+      }
+      return null;
+    }
+    const el=document.querySelector('[data-tour="'+step.target+'"]');
+    if(!el) return null;
+    const b=el.getBoundingClientRect();
+    if(b.width===0&&b.height===0) return null;
+    return {left:b.left,top:b.top,width:b.width,height:b.height};
+  },[getNodeRect]);
+
+  const go=useCallback(d=>{
+    dirRef.current=d;
+    setIndex(i=>{
+      const ni=i+d;
+      if(ni<0) return i;
+      if(ni>=TOUR_STEPS.length){ onClose(true); return i; }
+      return ni;
+    });
+  },[onClose]);
+
+  useLayoutEffect(()=>{
+    const step=TOUR_STEPS[index];
+    if(!step) return;
+    const r=rectFor(step);
+    if(!r){
+      const ni=index+dirRef.current;
+      if(ni<0||ni>=TOUR_STEPS.length){ onClose(true); return; }
+      setIndex(ni);
+      return;
+    }
+    const h0={left:r.left-PAD,top:r.top-PAD,width:r.width+2*PAD,height:r.height+2*PAD};
+    setHole(h0);
+    const vw=window.innerWidth,vh=window.innerHeight;
+    const ph=popRef.current?popRef.current.offsetHeight:160;
+    let place=step.place||'bottom',left,top;
+    if(place==='right'){
+      left=h0.left+h0.width+GAP; top=h0.top;
+      if(left+PW>vw-8){ place='bottom'; }
+    }
+    if(place==='bottom'||place==='top'){
+      left=h0.left+h0.width/2-PW/2;
+      if(place==='bottom'){
+        top=h0.top+h0.height+GAP;
+        if(top+ph>vh-8&&h0.top-GAP-ph>8){ place='top'; top=h0.top-GAP-ph; }
+      }else{
+        top=h0.top-GAP-ph;
+        if(top<8){ place='bottom'; top=h0.top+h0.height+GAP; }
+      }
+    }
+    left=Math.max(8,Math.min(left,vw-PW-8));
+    top=Math.max(8,Math.min(top,vh-ph-8));
+    setPos({left,top});
+  },[index,tick,rectFor,onClose]);
+
+  useEffect(()=>{
+    const bump=()=>setTick(t=>t+1);
+    window.addEventListener('resize',bump);
+    window.addEventListener('scroll',bump,true);
+    const key=e=>{
+      if(e.key==='Escape'){ e.preventDefault(); onClose(false); }
+      else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); go(1); }
+      else if(e.key==='ArrowLeft'){ e.preventDefault(); go(-1); }
+    };
+    window.addEventListener('keydown',key);
+    return ()=>{
+      window.removeEventListener('resize',bump);
+      window.removeEventListener('scroll',bump,true);
+      window.removeEventListener('keydown',key);
+    };
+  },[go,onClose]);
+
+  const step=TOUR_STEPS[index];
+  if(!step||!hole) return null;
+  const last=index===TOUR_STEPS.length-1;
+  return h(React.Fragment,null,
+    h('div',{className:'tour-catch',style:{position:'fixed',inset:0,zIndex:5999},
+      onClick:()=>onClose(false)}),
+    h('div',{className:'tour-hole',style:{left:hole.left,top:hole.top,width:hole.width,height:hole.height}}),
+    h('div',{className:'tour-pop',ref:popRef,
+        style:pos?{left:pos.left,top:pos.top}:{left:-9999,top:-9999},
+        onClick:e=>e.stopPropagation()},
+      h('h4',null,step.title),
+      h('p',null,step.body),
+      h('div',{className:'tour-row'},
+        h('span',{className:'tour-step'},(index+1)+' / '+TOUR_STEPS.length),
+        h('button',{className:'tour-skip',onClick:()=>onClose(false)},'Skip'),
+        index>0&&h('button',{className:'btn',onClick:()=>go(-1)},'Back'),
+        h('button',{className:'btn btn-accent',onClick:()=>go(1)},last?'Done':'Next')
       )
     )
   );
@@ -2108,6 +2256,28 @@ function App(){
      would just be a 404 in every visitor's console. The server advertises what
      it has on /api/bundled-models, so that is asked first rather than probing
      /model.json and treating its 404 as the answer. */
+  const [tourOpen,setTourOpen]=useState(false);
+  const tourAutoRef=useRef(false);
+  const getNodeRect=useCallback(()=>{
+    const cy=cyRef.current; if(!cy||cy.destroyed()) return null;
+    const nodes=cy.nodes().filter(n=>n.isChildless());
+    const n=nodes.length?nodes[0]:null;
+    if(!n) return null;
+    const bb=n.renderedBoundingBox();
+    const host=containerRef.current; if(!host) return null;
+    const r=host.getBoundingClientRect();
+    return {left:r.left+bb.x1,top:r.top+bb.y1,width:bb.x2-bb.x1,height:bb.y2-bb.y1};
+  },[]);
+  const closeTour=useCallback(()=>{ setTourOpen(false); store.set(TOUR_LS_KEY,'1'); },[]);
+  useEffect(()=>{
+    if(tourAutoRef.current) return;
+    if(manifest&&graphData&&!store.get(TOUR_LS_KEY,'')){
+      tourAutoRef.current=true;
+      const t=setTimeout(()=>setTourOpen(true),1000);
+      return ()=>clearTimeout(t);
+    }
+  },[manifest,graphData]);
+
   const autoLoadedRef=useRef(false);
   useEffect(()=>{
     if(manifest!==false||autoLoadedRef.current)return;
@@ -2780,6 +2950,8 @@ function App(){
           setTimeout(()=>cyRef.current&&cyRef.current.fit(50),100);
         }},h(ToolbarIcon,{name:'reset'}))
         ),
+        gallery&&graphData&&h('button',{className:'iconbtn',title:'Take a guided tour','aria-label':'Take a guided tour',
+          onClick:()=>setTourOpen(true)},'?'),
         h(ThemeControls,{theme,onTheme:setTheme,palette,onPalette:setPalette})
       )}),
 
@@ -2795,7 +2967,7 @@ function App(){
     h('div',{style:{display:'flex',flex:1,overflow:'hidden'}},
 
       // Left sidebar: the model outline.
-      h('div',{style:{width:250,background:'var(--card)',borderRight:'1px solid var(--line)',
+      h('div',{'data-tour':'domains',style:{width:250,background:'var(--card)',borderRight:'1px solid var(--line)',
                       display:'flex',flexDirection:'column',flexShrink:0}},
         h('div',{style:{padding:'12px 15px 0',flexShrink:0}},
           h('input',{type:'text',placeholder:'Search domains, tables...',
@@ -2819,7 +2991,7 @@ function App(){
       ),
 
       // Graph area
-      h('div',{style:{flex:1,position:'relative',background:'var(--bg)',
+      h('div',{'data-tour':'graph',style:{flex:1,position:'relative',background:'var(--bg)',
                       backgroundImage:'radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 0)',
                       backgroundSize:'40px 40px'}},
 
@@ -2906,7 +3078,10 @@ function App(){
     // Cmd-K jump palette — 40 industries do not browse well by clicking alone.
     gallery&&cmdOpen&&h(CommandPalette,{manifest,
       onPick:slug=>{setCmdOpen(false);setLocalModel(false);applySel({industry:slug});},
-      onClose:()=>setCmdOpen(false)})
+      onClose:()=>setCmdOpen(false)}),
+
+    // First-visit guided tour of the viewer's features (replayable via the ? button).
+    tourOpen&&h(Tour,{onClose:closeTour,getNodeRect})
   );
 }
 
