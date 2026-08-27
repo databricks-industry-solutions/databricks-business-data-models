@@ -2546,7 +2546,9 @@ function App(){
   // ── Navigation ─────────────────────────────────────────
   const navigate=useCallback((newFilter)=>{
     setFilterState(prev=>{
-      if(prev.type) setNavHistory(h=>[...h,prev]);
+      // Record every prior view — including the full model view (type:null) — so
+      // Back walks the whole chain one level at a time up to the full model.
+      setNavHistory(h=>[...h,prev]);
       return newFilter;
     });
   },[]);
@@ -2943,12 +2945,7 @@ function App(){
             h(ToolbarIcon,{name:'fontUp'})),
           h('button',{className:'tbtn icononly',title:'Fit graph to view','aria-label':'Fit to view',
             onClick:()=>cyRef.current&&cyRef.current.fit(50)},
-            h(ToolbarIcon,{name:'fit'})),
-          h('button',{className:'tbtn icononly',title:'Reset to the full model','aria-label':'Reset view',
-            onClick:()=>{
-          setFilterState({type:null,value:null});setNavHistory([]);
-          setTimeout(()=>cyRef.current&&cyRef.current.fit(50),100);
-        }},h(ToolbarIcon,{name:'reset'}))
+            h(ToolbarIcon,{name:'fit'}))
         ),
         gallery&&graphData&&h('button',{className:'iconbtn',title:'Take a guided tour','aria-label':'Take a guided tour',
           onClick:()=>setTourOpen(true)},'?'),
@@ -2970,6 +2967,15 @@ function App(){
       h('div',{'data-tour':'domains',style:{width:250,background:'var(--card)',borderRight:'1px solid var(--line)',
                       display:'flex',flexDirection:'column',flexShrink:0}},
         h('div',{style:{padding:'12px 15px 0',flexShrink:0}},
+          graphData&&h('button',{className:'btn',
+              title:'Reset to the full model view',
+              disabled:!filterState.type,
+              style:{width:'100%',justifyContent:'center',marginBottom:8},
+              onClick:()=>{
+                setFilterState({type:null,value:null});setNavHistory([]);
+                setTimeout(()=>cyRef.current&&cyRef.current.fit(50),100);
+              }},
+            '⌂ Full Model View'),
           h('input',{type:'text',placeholder:'Search domains, tables...',
                      value:searchTerm,onChange:e=>setSearchTerm(e.target.value),
                      style:{marginBottom:6}})
@@ -2995,8 +3001,9 @@ function App(){
                       backgroundImage:'radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 0)',
                       backgroundSize:'40px 40px'}},
 
-        // Back button
-        navHistory.length>0&&h('button',{
+        // Back button — present in any view other than the full model view; each
+        // press walks back one level until the full model is reached.
+        filterState.type&&h('button',{
           onClick:goBack,
           style:{position:'absolute',top:15,left:15,zIndex:1000,padding:'9px 16px',
                  background:'var(--card)',color:'var(--ink)',border:'1px solid var(--line-strong)',borderRadius:9,
