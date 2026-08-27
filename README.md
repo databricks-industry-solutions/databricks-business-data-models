@@ -369,3 +369,20 @@ These models are auto-generated and provided as-is for reference. Industry stand
 *40 industries · 80 models · 23,092 tables · 885,842 attributes · zero FK cycles, zero dangling foreign keys across all 80.*
 
 ---
+
+## Genie Implementation Skills
+
+The models in this repo describe *what good looks like* — a coherent, documented target shape for an
+industry. Getting there against a customer's real data is the next step, and that's what the
+[**`genie-implementation-skills/`**](./genie-implementation-skills/) folder provides: a suite of
+**Genie Code skills** that take a generated vibe data model and **form it to a customer's real data
+on Databricks**, one domain at a time, through a disciplined, phase-gated loop.
+
+Discovery, build, validation, and documentation run as engineered stations with a human at the
+decision points — assess → build → validate → document — and handoff between stations happens
+through documents, not chat.
+
+**See [`genie-implementation-skills/README.md`](./genie-implementation-skills/README.md) for full
+details**, or jump straight to the [developer docs index](./genie-implementation-skills/docs/developer/index.md).
+
+---
