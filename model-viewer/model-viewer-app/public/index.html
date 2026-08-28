@@ -713,6 +713,35 @@ const store={
   get(k,fb){try{return localStorage.getItem(k)||fb;}catch(e){return fb;}},
   set(k,v){try{localStorage.setItem(k,v);}catch(e){}},
 };
+const GC={code:'amralieg',host:'goatcounter.com'};
+const _gcQueue=[]; let _gcReady=false;
+function gcEnabled(){return GC.code&&GC.code!=='CODE'&&/\.github\.io$/.test(location.hostname);}
+function gcFlush(){
+  if(!window.goatcounter||typeof window.goatcounter.count!=='function') return;
+  while(_gcQueue.length){try{window.goatcounter.count(_gcQueue.shift());}catch(e){}}
+}
+function gcCount(o){ if(!gcEnabled()) return; _gcQueue.push(o); if(_gcReady) gcFlush(); }
+function gcModelView(slug,version,flavour,display){
+  if(!slug) return;
+  const v=(version||'').toUpperCase(),f=(flavour||'').toUpperCase();
+  gcCount({path:`/model/${slug}/${version||'v'}/${flavour||'na'}`,
+           title:`${display||slug} ${v} ${f}`.replace(/\s+/g,' ').trim()});
+}
+function gcEvent(name,title){ gcCount({path:name,title:title||name,event:true}); }
+function gcInit(){
+  if(!gcEnabled()) return;
+  window.goatcounter={no_onload:true};
+  const s=document.createElement('script');
+  s.async=true; s.src='//gc.zgo.at/count.js';
+  s.setAttribute('data-goatcounter',`https://${GC.code}.${GC.host}/count`);
+  s.addEventListener('load',()=>{
+    _gcReady=true;
+    gcCount({path:location.pathname+location.search});
+    gcFlush();
+  });
+  document.head.appendChild(s);
+}
+gcInit();
 function currentTheme(){return document.body.classList.contains('theme-dark')?'dark':'light';}
 function currentPalette(){
   const m=(document.body.className||'').match(/\bpal-([a-z]+)\b/);
@@ -1827,14 +1856,14 @@ function ThemeControls({theme,onTheme,palette,onPalette}){
   return h('div',{'data-tour':'theme',style:{display:'flex',alignItems:'center',gap:6}},
     h('button',{className:'iconbtn',title:theme==='dark'?'Switch to light':'Switch to dark',
       'aria-label':'Toggle colour theme',
-      onClick:()=>onTheme(theme==='dark'?'light':'dark')},theme==='dark'?'☀':'☾'),
+      onClick:()=>{const t=theme==='dark'?'light':'dark';gcEvent('theme-'+t,'Theme '+t);onTheme(t);}},theme==='dark'?'☀':'☾'),
     h('div',{ref:boxRef,style:{position:'relative'}},
       h('button',{className:'iconbtn',title:'Colour palette','aria-expanded':open,
         onClick:()=>setOpen(o=>!o)},'◐'),
       open&&h('div',{className:'menu',role:'menu'},
         PALETTES.map(p=>h('button',{key:p.id,role:'menuitem',
           className:p.id===palette?'on':'',
-          onClick:()=>{onPalette(p.id);setOpen(false);}},
+          onClick:()=>{gcEvent('palette-'+p.id,'Palette '+p.label);onPalette(p.id);setOpen(false);}},
           h('span',{className:'swatch'},
             ['green','violet','amber','teal'].map(hue=>
               h('i',{key:hue,style:{background:'var(--g-'+hue+'-line)'}}))),
@@ -1895,7 +1924,8 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
       h(DatabricksLogo),
       h(repoUrl?'a':'div',{className:'brandmark',
           ...(repoUrl?{href:repoUrl,target:'_blank',rel:'noopener noreferrer',
-            title:'Open the Lakehouse Industry Model repository on GitHub'}:{})},
+            title:'Open the Lakehouse Industry Model repository on GitHub',
+            onClick:()=>gcEvent('open-repo-home','Open repository home')}:{})},
         h('span',{className:'brandmark-title'},gallery?'Lakehouse Industry Model':'Model Viewer'),
         repoUrl&&h('span',{className:'extarrow','aria-hidden':'true'},'↗')
       )
@@ -1913,7 +1943,8 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
               ?`${modelLabel} on GitHub — readme, docs, metrics and diagram`
               :modelLabel,
             ...(modelDirUrl?{href:modelDirUrl,target:'_blank',
-              rel:'noopener noreferrer'}:{})},
+              rel:'noopener noreferrer',
+              onClick:()=>gcEvent('open-repo'+(sel&&sel.industry?'/'+sel.industry:''),`Open repo ${modelLabel}`)}:{})},
           h('span',{className:'lbl'},modelLabel),
           modelDirUrl&&h('span',{className:'extarrow','aria-hidden':'true'},'↗')
         ),
@@ -1947,6 +1978,7 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
             :`Download ${industry.display} ${entry.version.toUpperCase()} ${entry.flavour.toUpperCase()} Excel workbook`,
           onClick:()=>{
             if(!canDownload) return;
+            gcEvent('download/'+sel.industry+'/'+entry.flavour,`Download ${industry.display} ${entry.flavour.toUpperCase()}`);
             downloadUpstreamFile(xlsxUrl,xlsxFile)
               .catch(()=>window.open(xlsxUrl,'_blank','noopener'));
           }},
@@ -1966,7 +1998,7 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
       gallery&&h('div',{className:'seg','data-tour':'flavour',role:'group','aria-label':'Model flavour'},
         FLAVOURS.map(f=>h('button',{key:f.id,title:f.title,
           className:sel.flavour===f.id?'on':'',
-          onClick:()=>onSelect({flavour:f.id})},f.label))
+          onClick:()=>{gcEvent('flavour-'+f.id,'Flavour '+f.label);onSelect({flavour:f.id});}},f.label))
       ),
       gallery&&versions.length>1&&h('select',{value:sel.version||(industry?industry.latest:''),
         title:'Model version','aria-label':'Model version',
@@ -2268,12 +2300,12 @@ function App(){
     const r=host.getBoundingClientRect();
     return {left:r.left+bb.x1,top:r.top+bb.y1,width:bb.x2-bb.x1,height:bb.y2-bb.y1};
   },[]);
-  const closeTour=useCallback(()=>{ setTourOpen(false); store.set(TOUR_LS_KEY,'1'); },[]);
+  const closeTour=useCallback(()=>{ gcEvent('tour-close','Tour closed'); setTourOpen(false); store.set(TOUR_LS_KEY,'1'); },[]);
   useEffect(()=>{
     if(tourAutoRef.current) return;
     if(manifest&&graphData&&!store.get(TOUR_LS_KEY,'')){
       tourAutoRef.current=true;
-      const t=setTimeout(()=>setTourOpen(true),1000);
+      const t=setTimeout(()=>{gcEvent('tour-open-auto','Tour opened (first visit)');setTourOpen(true);},1000);
       return ()=>clearTimeout(t);
     }
   },[manifest,graphData]);
@@ -2340,7 +2372,7 @@ function App(){
     const token=++loadTokenRef.current;
 
     const cached=modelCache.current.get(entry.path);
-    if(cached){ setLoadError(null); setLoadStatus('✓ '+label); setLocalModel(false); processModel(cached,label); return; }
+    if(cached){ setLoadError(null); setLoadStatus('✓ '+label); setLocalModel(false); processModel(cached,label); gcModelView(slug,entry.version,entry.flavour,industry&&industry.display); return; }
 
     setIsLoading(true); setLoadError(null);
     setProgress({received:0,total:entry.bytes,label});
@@ -2357,6 +2389,7 @@ function App(){
       setLoadStatus('✓ '+label);
       setLocalModel(false);
       processModel(data,label);
+      gcModelView(slug,entry.version,entry.flavour,industry&&industry.display);
     }catch(e){
       if(token!==loadTokenRef.current) return;
       setProgress(null); setIsLoading(false);
@@ -2367,6 +2400,7 @@ function App(){
 
   const handleLoadJsonFile=useCallback((file)=>{
     if(!file) return;
+    gcEvent('load-json','Load local model.json');
     loadTokenRef.current++;
     setLocalModel(true);
     setSel({industry:null,version:null,flavour:'ecm'});
@@ -2545,6 +2579,7 @@ function App(){
 
   // ── Navigation ─────────────────────────────────────────
   const navigate=useCallback((newFilter)=>{
+    gcEvent('drill-'+((newFilter&&newFilter.type)||'view'),'Drill into '+((newFilter&&newFilter.type)||'view'));
     setFilterState(prev=>{
       // Record every prior view — including the full model view (type:null) — so
       // Back walks the whole chain one level at a time up to the full model.
@@ -2554,6 +2589,7 @@ function App(){
   },[]);
 
   const goBack=useCallback(()=>{
+    gcEvent('nav-back','Navigate back');
     setNavHistory(h=>{
       if(!h.length){setFilterState({type:null,value:null});return h;}
       const prev=h[h.length-1];
@@ -2561,6 +2597,8 @@ function App(){
       return h.slice(0,-1);
     });
   },[]);
+
+  const openCmd=useCallback(()=>{ gcEvent('search-open','Open industry search'); setCmdOpen(true); },[]);
 
   // ── Graph elements computation ─────────────────────────
   const graphElements=useMemo(()=>{
@@ -2924,7 +2962,7 @@ function App(){
         if(next.industry) setLocalModel(false);
         applySel(next);
       },
-      onJump:()=>setCmdOpen(true),
+      onJump:openCmd,
       onLoadJson:handleLoadJsonFile,
       showDomains,onShowDomains:setShowDomains,animate,onAnimate:setAnimate,
       actions:h(React.Fragment,null,
@@ -2948,7 +2986,7 @@ function App(){
             h(ToolbarIcon,{name:'fit'}))
         ),
         gallery&&graphData&&h('button',{className:'iconbtn',title:'Take a guided tour','aria-label':'Take a guided tour',
-          onClick:()=>setTourOpen(true)},'?'),
+          onClick:()=>{gcEvent('tour-open-manual','Tour opened (button)');setTourOpen(true);}},'?'),
         h(ThemeControls,{theme,onTheme:setTheme,palette,onPalette:setPalette})
       )}),
 
@@ -2972,6 +3010,7 @@ function App(){
               disabled:!filterState.type,
               style:{width:'100%',justifyContent:'center',marginBottom:8},
               onClick:()=>{
+                gcEvent('full-model-view','Full model view');
                 setFilterState({type:null,value:null});setNavHistory([]);
                 setTimeout(()=>cyRef.current&&cyRef.current.fit(50),100);
               }},
@@ -3027,7 +3066,7 @@ function App(){
             h('p',{style:{color:'var(--muted)',fontSize:14}},
               gallery?'Pick an industry to open its model':'No model.json is bundled with this app'),
             gallery&&h('button',{className:'btn',style:{marginTop:12},
-              onClick:()=>setCmdOpen(true)},'Choose industry')
+              onClick:openCmd},'Choose industry')
           )
         ),
 
@@ -3052,7 +3091,7 @@ function App(){
             gallery&&sel.industry&&h('button',{style:{...btnStyle,background:'var(--brand)',color:'var(--on-accent)',border:'none'},
               onClick:()=>{setLoadError(null);loadEntry(manifest,sel.industry,sel.version,sel.flavour);}},'Retry'),
             gallery&&h('button',{style:{...btnStyle},
-              onClick:()=>{setLoadError(null);setCmdOpen(true);}},'Choose another industry'),
+              onClick:()=>{setLoadError(null);openCmd();}},'Choose another industry'),
             h('button',{style:{...btnStyle,background:'var(--danger)',color:'var(--on-accent)',border:'none',marginRight:0},
               onClick:()=>setLoadError(null)},'Dismiss')
           )
