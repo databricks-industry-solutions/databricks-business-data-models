@@ -1,0 +1,18 @@
+examples/setup/data_generator/output/*
+!examples/setup/data_generator/output/.gitkeep
+
+# Packaged skill bundles / archives — build artifacts, never tracked
+*.zip
+
+# macOS / editor / workspace cruft
+.DS_Store
+.databricks-resources.json
+
+# Agent / tooling local state (never published)
+.claude/
+.superpowers/
+examples/sales_order_mvm/.raw/
+
+# Databricks workspace-export noise
+*.crc
+manifest.mf

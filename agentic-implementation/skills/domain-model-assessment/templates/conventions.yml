@@ -1,0 +1,212 @@
+# =============================================================================
+# conventions.yml — the SINGLE config surface for a customer/domain  (BASIC SEED)
+# =============================================================================
+# This is the BASIC, GENERIC seed shipped INSIDE the domain-model-assessment skill
+# so config-bootstrap (Phase −1) can seed a new project's conventions.yml even when
+# the skill is installed flat (the repo-root templates/ + examples/ are NOT shipped
+# with the skill). Fill in the <PLACEHOLDER> values from the Phase −1 Q&A, then
+# write the resolved file to the project root as `conventions.yml`.
+#
+# All four loop skills + domain-sync read the resolved file. The naming/coding
+# conventions below are generic best practice — KEEP them; only the identifiers
+# (customer, domain, catalogs, bronze schemas, source-system enum) are placeholders
+# to swap out. For a FULLY-WORKED example profile see the repo-root
+# `templates/conventions.yml` (the Meridian example) and the six overlay templates
+# in `templates/conventions-variants/` (the etl_type × output_model matrix).
+#
+# RULE FOR GENERATORS: catalogs/schemas are RUNTIME PARAMETERS, not literals and
+# not authoring-time substitutions. Generated notebooks declare widgets and read
+# catalog/schema from them; the DAB job passes the values in per target (dev/prod)
+# via `base_parameters` wired to DAB `variables`. This file supplies the DEFAULTS
+# and the per-source bronze map — NEVER bake catalog/schema/host/email literals
+# into generated SQL. See etl-development-framework/deployment-and-dab.md.
+# =============================================================================
+
+customer: <CUSTOMER_SLUG>   # short slug, used in project/skill context
+domain: <DOMAIN>            # the domain this project covers, e.g. sales_order
+
+# --- Output model (THE shape knob) -------------------------------------------
+#   normalized  -> (DEFAULT) faithful 3NF port of the vibe model: product names,
+#                  the model's lowercase PKs, its FK graph. No dim_/fact_ prefixes.
+#   dimensional -> Kimball star: dim_/fact_/bridge_, surrogate keys, explicit grain.
+#   hybrid      -> LAYERED: normalized 3NF silver, THEN a dimensional gold star
+#                  built downstream from that silver.
+# INVARIANT: every mode CREATEs fresh tables in catalogs.silver and NEVER writes to
+# the vibe model. See etl-development-framework/SKILL.md "Layering Contract".
+output_model: normalized    # normalized | dimensional | hybrid   (default: normalized)
+
+# --- ETL type (THE build-mechanism knob) -------------------------------------
+#   merge_notebook -> DDL setup + one Type-1 MERGE notebook per entity + a daily job.
+#   sdp_pipeline   -> (DEFAULT) whole-domain Lakeflow Declarative Pipeline: one
+#                     declarative source per entity (inline schema + CONSTRAINT EXPECT),
+#                     DDL lives INSIDE the flow, deployed as ONE `pipeline` DAB resource.
+# Orthogonal to output_model — SDP still honors normalized/dimensional/hybrid.
+# See etl-development-framework/sdp-pipeline-development.md.
+etl_type: sdp_pipeline      # merge_notebook | sdp_pipeline   (default: sdp_pipeline)
+
+# --- Vibe model location (READ-ONLY — where the graded vibe model lives) -----
+# The empty target/business model the vibe-modeling agent generated (the
+# vibe_metamodel_* tables + empty template DDL). Two skills READ it, NEVER write:
+# domain-model-assessment (Phase 1 inspection) + etl-development-framework (gap
+# analysis). This is a DISCOVERY/AUTHORING-TIME location, NOT an ETL runtime widget —
+# keep it strictly distinct from catalogs.silver so a build never writes into the
+# model it grades against.
+vibe_model:
+  catalog: <VIBE_MODEL_CATALOG>   # catalog the vibe model + vibe_metamodel_* live in
+  schema:  <VIBE_MODEL_SCHEMA>    # schema the vibe model lives in (READ-ONLY)
+  # --- Metamodel layout (OPTIONAL — set only if metamodel is NOT co-located/prefixed) ---
+  # Default: `vibe_metamodel_*` co-located in the SAME schema as the model tables.
+  # If the metamodel lives in a separate schema with bare names, set the two keys below;
+  # otherwise domain-model-assessment probes information_schema to detect the layout
+  # (discovery-protocol.md Step 1.0).
+  # metamodel_schema: _metamodel       # schema holding the metamodel tables (default: `schema`)
+  # metamodel_prefix: ""               # "" for bare names, "vibe_metamodel_" for prefixed (default)
+  # version: latest                    # pin a model version; default = MAX version for this domain
+
+# --- Catalog map (DEFAULTS for the params — skills never CREATE catalogs) ----
+# DEFAULT values the runtime widgets fall back to and the values a DAB target maps
+# into base_parameters. NOT substituted into SQL at authoring time.
+catalogs:
+  bronze:  <BRONZE_CATALOG>
+  silver:  <SILVER_CATALOG>    # LAND/WRITE target — where the build CREATEs + MERGEs.
+                               # Distinct from vibe_model above; NEVER the vibe_model catalog.
+  gold:    <GOLD_CATALOG>      # gold target (set only if output_model is dimensional/hybrid)
+  sandbox: <SANDBOX_CATALOG>   # dev/workshop target
+
+# --- Schema patterns ---------------------------------------------------------
+# `silver_pattern` names the WRITE/LAND schema for built silver. Keep it distinct
+# from `vibe_model.schema` so built tables never collide with the model.
+schemas:
+  silver_pattern:  "{domain}_silver"       # WRITE target schema, e.g. sales_order_silver
+  gold_pattern:    "{domain}_gold"
+  sandbox_pattern: "{domain}_{layer}_{project}"
+
+# --- Notebook language (MERGE + validation notebooks) ------------------------
+#   sql    -> (DEFAULT) native SQL notebooks.
+#   python -> Python notebooks hosting the same SQL via spark.sql(f"...").
+# INVARIANT: DDL, Model Guide, Genie, dashboard config are ALWAYS SQL. Only MERGE
+# and validation notebooks follow this setting; validation inherits the ETL value.
+etl_language: sql           # sql | python  (default: sql)
+
+# --- Bronze source map (logical source name → catalog.schema prefix) ---------
+# Each LOGICAL source gets its own fully-qualified prefix param so cross-catalog
+# joins just work. A notebook declares a widget per source it reads and references
+# it via IDENTIFIER(:src_<logical> || '.<table>'). Widget/param name is
+# `src_{logical}`, value is `{catalog}.{schema}`. Replace with the customer's real
+# bronze schemas (add/remove entries as needed).
+bronze_sources:
+  src_<LOGICAL_SOURCE_1>: <BRONZE_CATALOG>.<SCHEMA_1>   # e.g. ERP of record
+  src_<LOGICAL_SOURCE_2>: <BRONZE_CATALOG>.<SCHEMA_2>   # e.g. CRM
+  # ...one entry per logical bronze source the domain reads
+
+# --- Object naming -----------------------------------------------------------
+# NAMING + KEY STRATEGY ARE DRIVEN BY `output_model` ABOVE:
+#   normalized  -> vibe model's DDL is authoritative: product names, lowercase PKs,
+#                  the model's FK graph. No dim_/fact_ prefixes. surrogate_key_method: NONE.
+#   dimensional -> the Kimball standard below applies: dim_/fact_/bridge_, {Entity}_Key
+#                  SHA2 surrogates, Pascal_Snake business columns.
+#   hybrid      -> normalized silver follows the model; the gold star follows Kimball.
+# In ALL modes: metadata/audit column casing (_lower_snake) + the -1 FK default apply.
+# See etl-development-framework/naming-standards.md "⚠️ Precedence & key strategy by mode".
+naming:
+  table_case: lower_snake                # dim_customer, fact_sales_order_line  (dimensional)
+  dim_prefix: "dim_"                     # dimensional mode (+ hybrid gold) only
+  fact_prefix: "fact_"                   # dimensional mode (+ hybrid gold) only
+  bridge_prefix: "bridge_"               # dimensional mode (+ hybrid gold) only
+  gold_prefix: ""                        # gold tables have NO dim_/fact_ prefix
+  entity_form: singular                  # dim_customer, not dim_customers
+  business_column_case: Pascal_Snake     # dimensional mode; normalized/hybrid-silver follow the model
+  metadata_column_case: _lower_snake     # _source_system, _loaded_at  (ALWAYS applies, all modes)
+  surrogate_key_suffix: "_Key"           # {Entity}_Key  (dimensional / hybrid-gold)
+  # surrogate_key_method is a PER-MODE default, not a global literal:
+  #   dimensional / hybrid-gold   -> SHA2  (surrogate keys required; mandatory for SCD2)
+  #   normalized  / hybrid-silver -> NONE  (follow the model's PKs; surrogate only by exception)
+  surrogate_key_method: NONE             # SHA2 | NONE — resolved per output_model (see comment)
+  # surrogate_key_formula — the EXACT hash expression used to derive a surrogate PK and to
+  # resolve a FK to a parent's surrogate. Pick the variant by the vibe model's DECLARED PK type.
+  # Composite natural keys: wrap in CONCAT_WS('|', COALESCE(CAST(k AS STRING),'~'), …) first.
+  surrogate_key_formula:
+    bigint: "CAST(CONV(SUBSTRING(SHA2(CONCAT_WS('|', COALESCE(CAST({natural_key} AS STRING), '~')), 256), 1, 15), 16, 10) AS BIGINT)"
+    string: "SHA2(COALESCE(CAST({natural_key} AS STRING), '~'), 256)"
+  fk_naming: same_as_parent_pk           # FK column == parent dim's PK name (dimensional)
+
+# --- Audit / metadata columns (added to every table) -------------------------
+audit_columns:
+  prefix: "_"
+  columns: [_source_system, _loaded_at, _created_by, _modified_by]
+  event_timestamp: _source_updated_at    # carried on incremental/append facts (event-time, NOT _loaded_at)
+
+# --- Source-system enum (values written into _source_system) -----------------
+# Replace with the customer's actual source systems (UPPER_SNAKE).
+source_systems:
+  - <SOURCE_SYSTEM_1>
+  - <SOURCE_SYSTEM_2>
+
+# --- Source-system LABEL per bronze source (logical name -> _source_system value) ---
+# The literal written into `_source_system` for rows from each logical bronze source.
+# Keyed by the SAME logical names as `bronze_sources:`; every value must be one of
+# `source_systems:`.
+source_system_labels:
+  src_<LOGICAL_SOURCE_1>: <SOURCE_SYSTEM_1>
+  src_<LOGICAL_SOURCE_2>: <SOURCE_SYSTEM_2>
+
+# --- Physical date/timestamp formats per source (pre-populates Rule C) -------
+# Many sources store dates as strings in a fixed per-source format (e.g. SAP is often
+# `yyyyMMdd`; clean sources are ISO `yyyy-MM-dd`). The EXPECTED answer for the Rule C
+# probe, not a replacement for it. Keyed by logical bronze source name.
+date_formats:
+  src_<LOGICAL_SOURCE_1>: 'yyyy-MM-dd'
+  src_<LOGICAL_SOURCE_2>: 'yyyy-MM-dd'
+
+# --- Load-strategy thresholds (drive the per-entity strategy decision) -------
+# See etl-development-framework/merge-and-defensive-coding.md Load Strategy Decision.
+load_strategy:
+  full_merge_max_rows:  5_000_000        # <= this -> FULL_MERGE
+  incremental_max_rows: 100_000_000      # <= this + mutable + has update ts -> INCREMENTAL_MERGE
+  # append-only ledgers use APPEND_ONLY regardless of size
+  # > incremental_max_rows mutable, or SCD2/streaming-DQ -> escalate to SDP
+
+# --- SCD strategy (dimension history) ----------------------------------------
+#   type_1 -> (DEFAULT) current-state overwrite (MERGE on surrogate key). No history.
+#   type_2 -> versioned history: _effective_from/_effective_to/_is_current, new
+#             surrogate per version, close-prior-insert-new MERGE.
+# MODE INTERACTION (enforced): type_2 is DIMENSIONAL-only (or the GOLD layer of hybrid);
+# NOT supported on normalized-mode silver. type_2 forces surrogate_key_method: SHA2.
+# Per-entity override lives in etl_detailed_spec.md.
+scd_strategy: type_1        # type_1 | type_2   (default: type_1)
+
+# --- Known-null column disposition -------------------------------------------
+# A "known-null" column is a mapped bronze column that is 100% NULL across all rows.
+#   keep -> (DEFAULT) build the column; record it as a NULL_SOURCE gap in _gap_registry.
+#   drop -> omit from DDL; still register a NULL_SOURCE gap + review line (never silent).
+# A per-column override lives in etl_detailed_spec.md §2 "Null Disposition".
+null_columns:
+  disposition: keep   # keep | drop   (default: keep)
+
+# ── Model deviation (opt-in) ─────────────────────────────────────────────
+# Default OFF: the assessment NEVER silently descopes. A modeled entity/column with no
+# bronze source is recorded DEFERRED, not dropped. Turn a toggle on to let the assessment
+# DROP unsourced model elements or PROPOSE net-new ones — each still passes the human gate
+# and is logged in the Gap Registry + next_vibes. See SKILL.md Completion Self-Audit.
+model_deviation:
+  preset: none                    # none | pragmatic  (pragmatic flips the common set on:
+                                  #   drop_null_columns + drop_unbuilt_domain_fks +
+                                  #   drop_no_process_tables + allow_new_entities. An explicit
+                                  #   per-toggle value below overrides the preset.)
+  drop_null_columns: false        # drop columns whose only bronze source is 100% NULL
+  drop_unbuilt_domain_fks: false  # drop FKs pointing at domains not yet built
+  drop_no_process_tables: false   # drop modeled tables with no business process / no source
+  allow_new_entities: false       # let assessment PROPOSE net-new tables/columns from bronze
+
+# --- Gap-status enum (shared by _gap_registry, dashboard, Genie, NEXT_STEPS) -
+# Defined in domain-sync/next-steps-generation.md. Do not use legacy Descoped/Backlog.
+# NO-SILENT-DESCOPE RULE: a modeled entity/attribute with no bronze source is NEVER
+# dropped — it is recorded DEFERRED with a future-enhancement callout. Knob-blind.
+gap_status_enum: [OPEN, IN_PROGRESS, DEFERRED, ACCEPTED, RESOLVED]
+
+# --- Deployment (resolved via DAB variables, NOT baked into SQL) -------------
+deployment:
+  workspace_host: ""       # set per target in databricks.yml, not here
+  alert_email: ""          # failure-notification email
+  default_schedule_cron: "0 0 6 * * ? *"
+  default_timezone: UTC

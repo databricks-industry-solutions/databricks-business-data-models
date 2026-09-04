@@ -1,0 +1,225 @@
+resources:
+  jobs:
+    sales_order_validation:
+      name: sales_order_validation
+      description: |
+        Runs all 17 per-entity narrative/regression notebooks for the sales_order silver domain
+        in load-order tiers, then the scorecard claims PENDING check results and computes
+        entity grades. Overall grade B+ or above passes the quality gate.
+
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: "America/New_York"
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - "${var.alert_email}"
+
+      max_concurrent_runs: 1
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      parameters:
+        - name: silver_catalog
+          default: "${var.silver_catalog}"
+        - name: silver_schema
+          default: "${var.silver_schema}"
+        - name: triggered_by
+          default: SCHEDULED
+
+      tasks:
+        # Tier 0
+        - task_key: narrative_sales_contract
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_sales_contract
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Tier 1
+        - task_key: narrative_sales_contract_line
+          depends_on:
+            - task_key: narrative_sales_contract
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_sales_contract_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_quotation
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_quotation
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Tier 2
+        - task_key: narrative_order
+          depends_on:
+            - task_key: narrative_quotation
+            - task_key: narrative_sales_contract
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_quotation_line
+          depends_on:
+            - task_key: narrative_quotation
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_quotation_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Tier 3
+        - task_key: narrative_order_line
+          depends_on:
+            - task_key: narrative_order
+            - task_key: narrative_sales_contract_line
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_order_partner
+          depends_on:
+            - task_key: narrative_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order_partner
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_return_order
+          depends_on:
+            - task_key: narrative_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_return_order
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_delivery
+          depends_on:
+            - task_key: narrative_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_delivery
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_credit_check
+          depends_on:
+            - task_key: narrative_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_credit_check
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Tier 4
+        - task_key: narrative_order_schedule_line
+          depends_on:
+            - task_key: narrative_order_line
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order_schedule_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_order_configuration
+          depends_on:
+            - task_key: narrative_order
+            - task_key: narrative_order_line
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order_configuration
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_return_order_line
+          depends_on:
+            - task_key: narrative_return_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_return_order_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_delivery_line
+          depends_on:
+            - task_key: narrative_delivery
+            - task_key: narrative_order_line
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_delivery_line
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Tier 5
+        - task_key: narrative_atp_check
+          depends_on:
+            - task_key: narrative_order
+            - task_key: narrative_order_line
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_atp_check
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_order_status_event
+          depends_on:
+            - task_key: narrative_order
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_order_status_event
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        - task_key: narrative_delivery_schedule
+          depends_on:
+            - task_key: narrative_order
+            - task_key: narrative_sales_contract
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/narrative_delivery_schedule
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+
+        # Scorecard — terminal task
+        - task_key: scorecard
+          depends_on:
+            - task_key: narrative_atp_check
+            - task_key: narrative_order_status_event
+            - task_key: narrative_delivery_schedule
+          notebook_task:
+            notebook_path: /Workspace/Users/stuart.swartz@databricks.com/vibe-modeling-skills-testing/vibe-model-skills-testing/meridian/sales-order-mvm/src/silver/validation/scorecard
+            source: WORKSPACE
+            base_parameters:
+              silver_catalog: "{{job.parameters.silver_catalog}}"
+              silver_schema: "{{job.parameters.silver_schema}}"
+              triggered_by: "{{job.parameters.triggered_by}}"

@@ -1,0 +1,16 @@
+resources:
+  pipelines:
+    sales_order_silver_pipeline:
+      name: sales_order_silver_pipeline
+      channel: PREVIEW
+      continuous: false
+      catalog: ${var.silver_catalog}
+      schema: ${var.silver_schema}
+      root_path: ../
+      libraries:
+        - glob:
+            include: ../src/silver/pipeline/**
+      notifications:
+        - email_recipients: ["${var.alert_email}"]
+          alerts: ["on-update-failure"]
+      serverless: true
