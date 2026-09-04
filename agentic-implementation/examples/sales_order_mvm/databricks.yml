@@ -1,0 +1,20 @@
+bundle:
+  name: sales_order_silver
+
+include:
+  - resources/*.yml
+
+variables:
+  silver_catalog:
+    default: manufacturing_silver_vibe
+  silver_schema:
+    default: sales_order
+  alert_email:
+    default: stuart.swartz@databricks.com
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production

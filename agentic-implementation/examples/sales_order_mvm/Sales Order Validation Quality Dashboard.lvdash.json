@@ -1,0 +1,816 @@
+{
+  "datasets": [
+    {
+      "name": "ds_health_banner",
+      "displayName": "Overall Health Banner",
+      "queryLines": [
+        "SELECT Overall_Grade, Run_Timestamp, Total_Entities, Entities_Grade_A, Drift_Alerts_Count FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp DESC LIMIT 1"
+      ]
+    },
+    {
+      "name": "ds_entity_grades",
+      "displayName": "Entity Grade Table",
+      "queryLines": [
+        "SELECT Table_Name, Table_Type, Tier, Row_Count, Grade, Grade_Delta, Pk_Duplicate_Count, Fk_Orphan_Rate_Pct, Key_Column_Pop_Pct, Drift_Columns_Count, Integration_Pass, Known_Gaps_Count FROM manufacturing_silver_vibe.sales_order._validation_table_result WHERE Run_Id = (SELECT Run_Id FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp DESC LIMIT 1) ORDER BY CASE Grade WHEN 'F' THEN 1 WHEN 'D' THEN 2 WHEN 'C' THEN 3 WHEN 'B' THEN 4 WHEN 'B+' THEN 5 WHEN 'A' THEN 6 END, Tier, Table_Name"
+      ]
+    },
+    {
+      "name": "ds_grade_distribution",
+      "displayName": "Grade Distribution",
+      "queryLines": [
+        "SELECT Grade, COUNT(*) AS Entity_Count FROM manufacturing_silver_vibe.sales_order._validation_table_result WHERE Run_Id = (SELECT Run_Id FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp DESC LIMIT 1) GROUP BY Grade"
+      ]
+    },
+    {
+      "name": "ds_grade_trend",
+      "displayName": "Overall Grade Over Time",
+      "queryLines": [
+        "SELECT DATE(Run_Timestamp) AS Run_Date, Overall_Grade, Entities_Grade_A, Entities_Grade_B_Plus + Entities_Grade_B AS Entities_Grade_B_Any, Entities_Grade_C_Or_Below, Drift_Alerts_Count FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp"
+      ]
+    },
+    {
+      "name": "ds_row_count_trend",
+      "displayName": "Row Count Trend",
+      "queryLines": [
+        "SELECT r.Run_Timestamp, t.Table_Name, t.Row_Count FROM manufacturing_silver_vibe.sales_order._validation_table_result t JOIN manufacturing_silver_vibe.sales_order._validation_run r ON t.Run_Id = r.Run_Id ORDER BY t.Table_Name, r.Run_Timestamp"
+      ]
+    },
+    {
+      "name": "ds_gap_summary",
+      "displayName": "Gap Registry Summary",
+      "queryLines": [
+        "SELECT Priority, Status, COUNT(*) AS Gap_Count FROM manufacturing_silver_vibe.sales_order._gap_registry WHERE Status NOT IN ('RESOLVED') GROUP BY Priority, Status ORDER BY CASE Priority WHEN 'P0' THEN 1 WHEN 'P1' THEN 2 WHEN 'P2' THEN 3 WHEN 'P3' THEN 4 END, Status"
+      ]
+    },
+    {
+      "name": "ds_gap_detail",
+      "displayName": "Prioritized Gap Detail",
+      "queryLines": [
+        "SELECT Priority, Table_Name, Column_Name, Gap_Description, Gap_Type, Status, Unblock_Action, Impact_Description FROM manufacturing_silver_vibe.sales_order._gap_registry WHERE Status NOT IN ('RESOLVED','DEFERRED') ORDER BY CASE Priority WHEN 'P0' THEN 1 WHEN 'P1' THEN 2 WHEN 'P2' THEN 3 WHEN 'P3' THEN 4 END, Created_Date"
+      ]
+    },
+    {
+      "name": "ds_integration_checks",
+      "displayName": "Integration Health Checks",
+      "queryLines": [
+        "SELECT Table_Name, Check_Name, Status, Actual_Value, Message FROM manufacturing_silver_vibe.sales_order._validation_check_detail WHERE Run_Id = (SELECT Run_Id FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp DESC LIMIT 1) AND Check_Type = 'INTEGRATION' ORDER BY CASE Status WHEN 'FAIL' THEN 1 WHEN 'WARN' THEN 2 ELSE 3 END, Table_Name"
+      ]
+    },
+    {
+      "name": "ds_fk_orphan_rates",
+      "displayName": "FK Orphan Rates",
+      "queryLines": [
+        "SELECT Check_Name AS Relationship, CAST(Actual_Value AS DECIMAL(7,4)) AS Orphan_Rate_Pct, Status FROM manufacturing_silver_vibe.sales_order._validation_check_detail WHERE Run_Id = (SELECT Run_Id FROM manufacturing_silver_vibe.sales_order._validation_run ORDER BY Run_Timestamp DESC LIMIT 1) AND Check_Type = 'FK' ORDER BY CAST(Actual_Value AS DECIMAL(7,4)) DESC"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "tab_current_state",
+      "displayName": "Current State",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_health",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_banner",
+                  "fields": [
+                    {
+                      "name": "Overall_Grade",
+                      "expression": "`Overall_Grade`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "Overall_Grade",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Model Health",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_total_entities",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_banner",
+                  "fields": [
+                    {
+                      "name": "sum(Total_Entities)",
+                      "expression": "SUM(`Total_Entities`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(Total_Entities)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Total Entities",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_grade_a_count",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_health_banner",
+                  "fields": [
+                    {
+                      "name": "sum(Entities_Grade_A)",
+                      "expression": "SUM(`Entities_Grade_A`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(Entities_Grade_A)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Grade A Entities",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "w_entity_grades",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_entity_grades",
+                  "fields": [
+                    {
+                      "name": "Table_Name",
+                      "expression": "`Table_Name`"
+                    },
+                    {
+                      "name": "Table_Type",
+                      "expression": "`Table_Type`"
+                    },
+                    {
+                      "name": "Tier",
+                      "expression": "`Tier`"
+                    },
+                    {
+                      "name": "Row_Count",
+                      "expression": "`Row_Count`"
+                    },
+                    {
+                      "name": "Grade",
+                      "expression": "`Grade`"
+                    },
+                    {
+                      "name": "Grade_Delta",
+                      "expression": "`Grade_Delta`"
+                    },
+                    {
+                      "name": "Pk_Duplicate_Count",
+                      "expression": "`Pk_Duplicate_Count`"
+                    },
+                    {
+                      "name": "Fk_Orphan_Rate_Pct",
+                      "expression": "`Fk_Orphan_Rate_Pct`"
+                    },
+                    {
+                      "name": "Key_Column_Pop_Pct",
+                      "expression": "`Key_Column_Pop_Pct`"
+                    },
+                    {
+                      "name": "Drift_Columns_Count",
+                      "expression": "`Drift_Columns_Count`"
+                    },
+                    {
+                      "name": "Integration_Pass",
+                      "expression": "`Integration_Pass`"
+                    },
+                    {
+                      "name": "Known_Gaps_Count",
+                      "expression": "`Known_Gaps_Count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Table_Name"
+                  },
+                  {
+                    "fieldName": "Table_Type"
+                  },
+                  {
+                    "fieldName": "Tier"
+                  },
+                  {
+                    "fieldName": "Row_Count"
+                  },
+                  {
+                    "fieldName": "Grade"
+                  },
+                  {
+                    "fieldName": "Grade_Delta"
+                  },
+                  {
+                    "fieldName": "Pk_Duplicate_Count"
+                  },
+                  {
+                    "fieldName": "Fk_Orphan_Rate_Pct"
+                  },
+                  {
+                    "fieldName": "Key_Column_Pop_Pct"
+                  },
+                  {
+                    "fieldName": "Drift_Columns_Count"
+                  },
+                  {
+                    "fieldName": "Integration_Pass"
+                  },
+                  {
+                    "fieldName": "Known_Gaps_Count"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Entity Grades — Current Run",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "w_grade_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_grade_distribution",
+                  "fields": [
+                    {
+                      "name": "sum(Entity_Count)",
+                      "expression": "SUM(`Entity_Count`)"
+                    },
+                    {
+                      "name": "Grade",
+                      "expression": "`Grade`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "theta": {
+                  "fieldName": "sum(Entity_Count)",
+                  "displayName": "Entity_Count"
+                },
+                "color": {
+                  "fieldName": "Grade",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Grade"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Grade Distribution",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 3,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "name": "tab_trend",
+      "displayName": "Historical Trend",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_grade_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_grade_trend",
+                  "fields": [
+                    {
+                      "name": "Run_Date",
+                      "expression": "`Run_Date`"
+                    },
+                    {
+                      "name": "sum(Entities_Grade_A)",
+                      "expression": "SUM(`Entities_Grade_A`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "Run_Date",
+                  "displayName": "Run_Date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(Entities_Grade_A)",
+                  "displayName": "Entities_Grade_A",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Grade A Entities Over Time",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "w_row_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_row_count_trend",
+                  "fields": [
+                    {
+                      "name": "Run_Timestamp",
+                      "expression": "`Run_Timestamp`"
+                    },
+                    {
+                      "name": "sum(Row_Count)",
+                      "expression": "SUM(`Row_Count`)"
+                    },
+                    {
+                      "name": "Table_Name",
+                      "expression": "`Table_Name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "Run_Timestamp",
+                  "displayName": "Run_Timestamp",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(Row_Count)",
+                  "displayName": "Row_Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "Table_Name",
+                  "displayName": "Table_Name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Row Count Trend by Entity",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "name": "tab_backlog",
+      "displayName": "Priority Backlog",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_gap_summary",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_gap_summary",
+                  "fields": [
+                    {
+                      "name": "Priority",
+                      "expression": "`Priority`"
+                    },
+                    {
+                      "name": "sum(Gap_Count)",
+                      "expression": "SUM(`Gap_Count`)"
+                    },
+                    {
+                      "name": "Status",
+                      "expression": "`Status`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "Priority",
+                  "displayName": "Priority",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(Gap_Count)",
+                  "displayName": "Gap_Count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "Status",
+                  "displayName": "Status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Gaps by Priority & Status",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "w_gap_detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_gap_detail",
+                  "fields": [
+                    {
+                      "name": "Priority",
+                      "expression": "`Priority`"
+                    },
+                    {
+                      "name": "Table_Name",
+                      "expression": "`Table_Name`"
+                    },
+                    {
+                      "name": "Column_Name",
+                      "expression": "`Column_Name`"
+                    },
+                    {
+                      "name": "Gap_Description",
+                      "expression": "`Gap_Description`"
+                    },
+                    {
+                      "name": "Gap_Type",
+                      "expression": "`Gap_Type`"
+                    },
+                    {
+                      "name": "Status",
+                      "expression": "`Status`"
+                    },
+                    {
+                      "name": "Unblock_Action",
+                      "expression": "`Unblock_Action`"
+                    },
+                    {
+                      "name": "Impact_Description",
+                      "expression": "`Impact_Description`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Priority"
+                  },
+                  {
+                    "fieldName": "Table_Name"
+                  },
+                  {
+                    "fieldName": "Column_Name"
+                  },
+                  {
+                    "fieldName": "Gap_Description"
+                  },
+                  {
+                    "fieldName": "Gap_Type"
+                  },
+                  {
+                    "fieldName": "Status"
+                  },
+                  {
+                    "fieldName": "Unblock_Action"
+                  },
+                  {
+                    "fieldName": "Impact_Description"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Prioritized Gap Detail (Open Gaps)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "name": "tab_integration",
+      "displayName": "Integration Health",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_integ_checks",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_integration_checks",
+                  "fields": [
+                    {
+                      "name": "Table_Name",
+                      "expression": "`Table_Name`"
+                    },
+                    {
+                      "name": "Check_Name",
+                      "expression": "`Check_Name`"
+                    },
+                    {
+                      "name": "Status",
+                      "expression": "`Status`"
+                    },
+                    {
+                      "name": "Actual_Value",
+                      "expression": "`Actual_Value`"
+                    },
+                    {
+                      "name": "Message",
+                      "expression": "`Message`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Table_Name"
+                  },
+                  {
+                    "fieldName": "Check_Name"
+                  },
+                  {
+                    "fieldName": "Status"
+                  },
+                  {
+                    "fieldName": "Actual_Value"
+                  },
+                  {
+                    "fieldName": "Message"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "Star Schema Join Preservation",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "w_fk_orphans",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_fk_orphan_rates",
+                  "fields": [
+                    {
+                      "name": "Relationship",
+                      "expression": "`Relationship`"
+                    },
+                    {
+                      "name": "Orphan_Rate_Pct",
+                      "expression": "`Orphan_Rate_Pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "Relationship",
+                  "displayName": "Relationship",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "Orphan_Rate_Pct",
+                  "displayName": "Orphan_Rate_Pct",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              },
+              "frame": {
+                "title": "FK Orphan Rates by Relationship",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ]
+}
