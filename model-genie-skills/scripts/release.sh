@@ -16,7 +16,7 @@
 #   2. Resolve the next version (from an explicit arg, a bump keyword, or by
 #      reading the commits since the last tag).
 #   3. Regenerate CHANGELOG.md from those commits (Keep a Changelog format).
-#   4. Stamp the version into VERSION and README.md.
+#   4. Stamp the version into VERSION.
 #   5. Rebuild a clean skills.zip (no .DS_Store / __MACOSX cruft).
 #   6. Commit `chore(release): vX.Y.Z`, tag `vX.Y.Z`.
 #   7. Push the commit + tag and publish a GitHub Release with skills.zip attached.
@@ -126,7 +126,10 @@ section() {                        # $1 = grep pattern, $2 = heading
   local body; body="$(git log ${RANGE:+$RANGE} --no-merges --pretty='%s' \
     | grep -E "$1" | grep -vE '^chore\(release\)' \
     | sed -E "s/^[a-z]+(\(.+\))?!?: //" | sed 's/^/- /' || true)"
-  [[ -n "$body" ]] && printf '### %s\n%s\n\n' "$2" "$body"
+  # Use `if` (not `&&`) so an empty section returns 0 — otherwise the last
+  # empty section leaks a non-zero status into `NOTES="$(...)"`, which aborts
+  # the release under `set -e`.
+  if [[ -n "$body" ]]; then printf '### %s\n%s\n\n' "$2" "$body"; fi
 }
 
 if $FIRST_RELEASE; then
@@ -152,7 +155,7 @@ say "Changelog for ${TAG}:"
 printf '%s\n' "$NOTES" | sed 's/^/  /'
 
 # ---------------------------------------------------------------------------
-# 4. Write files (CHANGELOG, VERSION, README stamp)
+# 4. Write files (CHANGELOG, VERSION)
 # ---------------------------------------------------------------------------
 write_changelog() {
   local header entry rest
@@ -170,12 +173,10 @@ ${NOTES}"
 }
 
 if $DRY_RUN; then
-  echo "  [dry-run] would rewrite CHANGELOG.md, VERSION, README.md version stamp"
+  echo "  [dry-run] would rewrite CHANGELOG.md, VERSION"
 else
   write_changelog
   echo "$NEXT" > VERSION
-  # README stamp lives between <!-- version --> ... <!-- /version --> markers.
-  perl -0pi -e "s/<!-- version -->.*?<!-- \/version -->/<!-- version -->\*\*Version:\*\* ${NEXT} \x28see \[CHANGELOG.md\]\x28CHANGELOG.md\x29\x29<!-- \/version -->/s" README.md
 fi
 
 # ---------------------------------------------------------------------------
@@ -192,7 +193,7 @@ if $DRY_RUN; then echo "  [dry-run] would rebuild skills.zip"; else build_zip; f
 # ---------------------------------------------------------------------------
 # 6. Commit + tag
 # ---------------------------------------------------------------------------
-run "git add CHANGELOG.md VERSION README.md"
+run "git add CHANGELOG.md VERSION"
 run "git commit -m 'chore(release): ${TAG}'"
 run "git tag -a '${TAG}' -m '${TAG}'"
 

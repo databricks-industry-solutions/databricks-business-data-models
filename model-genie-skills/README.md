@@ -1,7 +1,5 @@
 # vibe-model-skills
 
-<!-- version -->**Version:** 0.4.0 (see [CHANGELOG.md](CHANGELOG.md))<!-- /version -->
-
 A suite of **Genie Code skills** that take a generated **vibe data model** — a coherent,
 documented business model — and **form it to a customer's real data on Databricks**, one domain at
 a time, through a disciplined, phase-gated loop. Discovery, build, validation, and documentation
@@ -166,30 +164,10 @@ hard-coded prefix would break in one layout or the other. The only **repo-root-r
 references to shared assets (`templates/conventions.yml`, `examples/…`), which are **not** installed
 into `.assistant/skills/`.
 
-## Versioning & releases
+## Versioning
 
-The suite is versioned as **one unit** — the six skills reference each other with sibling-relative
-paths and hand off through documents, so they ship and version together. Releases follow
-[Semantic Versioning](https://semver.org/), driven by [Conventional Commits](https://www.conventionalcommits.org/):
-
-| Commit prefix | Bump | Meaning |
-| --- | --- | --- |
-| `feat!:` / `BREAKING CHANGE:` | **major** | Breaks a skill contract, the `conventions.yml` schema, or an inter-skill handoff doc — an in-flight model would need rework |
-| `feat:` | **minor** | New skill, variant, or capability; backward-compatible |
-| `fix:` / `docs:` / other | **patch** | Corrected or clarified guidance |
-
-A release is a git tag `vX.Y.Z` on `main` plus a GitHub Release with the changelog notes and a
-freshly built `skills.zip` attached. To cut one:
-
-```bash
-scripts/release.sh --dry-run     # preview the version + changelog, change nothing
-scripts/release.sh               # auto-detect the bump from commits since the last tag
-scripts/release.sh minor         # or force a bump …
-scripts/release.sh 0.1.0         # … or pin an exact version
-```
-
-The script resolves the next version, regenerates [`CHANGELOG.md`](CHANGELOG.md), stamps
-[`VERSION`](VERSION) and this README, rebuilds `skills.zip` (clean — no `.DS_Store`/`__MACOSX`),
-commits `chore(release): vX.Y.Z`, tags, and — after a confirmation prompt — pushes and publishes
-the GitHub Release. `skills.zip` is a build artifact (git-ignored); it lives only as a release
-asset. The first tagged release will be **`v0.1.0`**.
+The suite versions as **one unit** — the six skills reference each other with sibling-relative
+paths and hand off through documents, so they ship together. Release history lives in
+[`CHANGELOG.md`](CHANGELOG.md); releases follow [Semantic Versioning](https://semver.org/) driven
+by [Conventional Commits](https://www.conventionalcommits.org/), cut with
+[`scripts/release.sh`](scripts/release.sh).
