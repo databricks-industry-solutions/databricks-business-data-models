@@ -1,17 +1,24 @@
-# vibe-model-skills
+# Model Genie Skills
 
-A suite of **Genie Code skills** that take a generated **vibe data model** — a coherent,
-documented business model — and **form it to a customer's real data on Databricks**, one domain at
-a time, through a disciplined, phase-gated loop. Discovery, build, validation, and documentation
-run as engineered stations with a human at the decision points, not a roaming agent.
+*Take a generated vibe data model and form it to a customer's real data on Databricks — assess → build → validate → document, one domain at a time.*
 
-The loop, in one line:
+## Summary
 
-`domain-model-assessment` (assess) → `etl-development-framework` (build) →
-`domain-model-validation` (validate) → `domain-documentation` (document) — with
-`autonomous-validation` governing execution discipline throughout and `domain-sync` keeping the
-model in sync after it's built. **Handoff between stations is through documents, not chat**
-(`etl_detailed_spec.md` → `build_manifest.md` → `validation_summary.md`).
+- **What it is** — a suite of **Genie Code skills** that take a generated **vibe data model** (a
+  coherent, documented business model) and **form it to a customer's real data on Databricks**, one
+  domain at a time, through a disciplined, phase-gated loop. Engineered stations with a human at the
+  decision points, not a roaming agent.
+- **The loop** — `domain-model-assessment` (assess) → `etl-development-framework` (build) →
+  `domain-model-validation` (validate) → `domain-documentation` (document), with
+  `autonomous-validation` governing execution discipline throughout and `domain-sync` keeping the
+  model in sync after it's built.
+- **Handoff is through documents, not chat** — `etl_detailed_spec.md` → `build_manifest.md` →
+  `validation_summary.md`. Discovery runs once; everything downstream inherits it.
+- **What you get** — a coherent, documented, validated **silver** layer, fast; the same skills
+  accelerate the **gold/metrics** layer when there are existing KPIs to grade generated metrics
+  against.
+
+---
 
 ## Start here
 
@@ -33,6 +40,8 @@ quadrants below:
 | **Look something up** — skill catalog, handoff chain, `conventions.yml`, human gates | [reference.md](docs/developer/reference.md) |
 | **Understand why it works this way** — the motion, the vibe-model fit, phase gates | [explanation.md](docs/developer/explanation.md) |
 
+---
+
 ## The skills
 
 | # | Skill | Station | What it does |
@@ -44,7 +53,11 @@ quadrants below:
 | — | `autonomous-validation` | *(cross-cutting)* | Execution-discipline guidance for running at scale: scratchpad-validate → confirm → persist, batching discipline, human-in-the-loop contract. |
 | — | `domain-sync` | *(steady-state)* | Keeps a built model's artifacts in sync after point updates: change→artifact impact matrix, staleness linter, scoped regeneration. |
 
-Every loop station emits `docs/commentary/{skill}-improvement-recommendations.md` on completion (protocol: `autonomous-validation/commentary-protocol.md`) — a per-run, self-improving feedback artifact.
+Every loop station emits `docs/commentary/{skill}-improvement-recommendations.md` on completion
+(protocol: `autonomous-validation/commentary-protocol.md`) — a per-run, self-improving feedback
+artifact.
+
+---
 
 ## Installing the skills
 
@@ -57,7 +70,7 @@ Genie Code discovers skills from a **`.assistant/skills/` directory**, at one of
 
 Install **all six skill folders together** into the location you want — each keeps its own folder,
 and its `SKILL.md` + supporting files travel with it. They must stay **siblings in one directory**;
-they cross-reference each other by sibling-relative path (see "Skills layout" below).
+they cross-reference each other by sibling-relative path (see [Repo layout](#repo-layout) below).
 
 ```
 /Workspace/.assistant/skills/          # or /Workspace/Users/<you>@databricks.com/.assistant/skills/
@@ -94,7 +107,9 @@ or just describe the task and let Genie Code match it by relevance.
 > copy it into the working project where you run the loop; `examples/` is the reference/demo dataset,
 > used from this repo.
 
-## Configuration — one file
+---
+
+## Configuration
 
 Everything a customer/domain needs is set in a single `conventions.yml` (catalogs, naming,
 source-system enum, load thresholds). Two orthogonal knobs shape the build:
@@ -108,61 +123,45 @@ See [`templates/conventions.yml`](templates/conventions.yml) for the fully-annot
 [`templates/conventions-variants/`](templates/conventions-variants/README.md) for the six overlay
 templates (the `etl_type` × `output_model` matrix).
 
-## Try it — the Meridian demo
+---
+
+## Try it: the Meridian demo
 
 `examples/` is a portable, synthetic **Meridian Fluid Controls** dataset (a fictional
 industrial-valve manufacturer) so you can run the loop without any customer data:
 
-- `setup/` — stand up the shared synthetic bronze once: `setup/data_generator/` (seeded Python
-  package that generates the CSVs) + `setup/ingest/` (the CTAS-from-`read_files` ingest SQL)
-- `field_service/` — a minimal 5-entity fast-loop domain with all six matched `conventions.yml`
-  variants (see its [README](examples/field_service/README.md)); it's the domain the
-  [tutorial](docs/developer/tutorial.md) runs on, and
-  [`EXAMPLE_OUTPUT.md`](examples/field_service/EXAMPLE_OUTPUT.md) illustrates the finished artifact
-  tree a run produces
-- `sales_order_mvm/` — the realistic-scale counterpart to `field_service`: a 16-table `sales_order`
-  model with a **committed real run** (assess→build→validate→document, silver — 17 tables, all Grade
-  A) that exercises all three `model_deviation` levers, cross-domain FK deferral, and
-  SQL-reserved-word edge cases; the gold star is designed but not built (see its
-  [README](examples/sales_order_mvm/README.md) and
-  [`EXAMPLE_OUTPUT.md`](examples/sales_order_mvm/EXAMPLE_OUTPUT.md))
+- **`setup/`** — stand up the shared synthetic bronze once: `data_generator/` (seeded Python package
+  that generates the CSVs) + `ingest/` (the CTAS-from-`read_files` SQL).
+- **`field_service/`** — a minimal 5-entity fast-loop domain with all six matched `conventions.yml`
+  variants ([README](examples/field_service/README.md)). It's the domain the
+  [tutorial](docs/developer/tutorial.md) runs on; [`EXAMPLE_OUTPUT.md`](examples/field_service/EXAMPLE_OUTPUT.md)
+  shows the finished artifact tree a run produces.
+- **`sales_order_mvm/`** — the realistic-scale counterpart: a 16-table `sales_order` model with a
+  **committed real run** (assess→build→validate→document, silver — 17 tables, all Grade A) exercising
+  all three `model_deviation` levers, cross-domain FK deferral, and SQL-reserved-word edge cases; the
+  gold star is designed but not built ([README](examples/sales_order_mvm/README.md),
+  [`EXAMPLE_OUTPUT.md`](examples/sales_order_mvm/EXAMPLE_OUTPUT.md)).
+
+---
 
 ## Repo layout
 
 ```
-skills/                          The six skills (see "Skills layout" below)
+skills/                          The six skills, each a folder (SKILL.md + supporting files)
 templates/conventions.yml        Single config surface (catalogs, naming, thresholds)
 templates/conventions-variants/  Six overlay templates — the etl_type × output_model matrix
 examples/                        Synthetic bronze dataset + fast-loop domain (portable demo)
 docs/developer/                  Diátaxis docs on using the suite
 ```
 
-## Skills layout — IMPORTANT (read before moving skills)
+The six skills live under `skills/` here for tidiness, but they install **flat as siblings** in a
+`.assistant/skills/` directory (see [Installing the skills](#installing-the-skills)) — functionally
+identical. Every cross-reference *between* skills is **sibling-relative** (e.g.
+`etl-development-framework/deployment-and-dab.md`), so it resolves in both layouts as long as the six
+move together and stay siblings. Don't add or strip a `skills/` prefix on those paths; only
+shared-asset references (`templates/…`, `examples/…`) are repo-root-relative.
 
-In **this repo**, the skills live under `skills/` for tidiness:
-
-```
-skills/
-├─ domain-model-assessment/     # station 1 — Assess
-├─ etl-development-framework/    # station 2 — Build
-├─ domain-model-validation/     # station 3 — Validate
-├─ domain-documentation/        # station 4 — Document
-├─ autonomous-validation/       # cross-cutting — execution discipline
-└─ domain-sync/                 # steady-state — keep artifacts in sync after point fixes
-```
-
-**When installed for Genie Code, the six folders land flat as siblings in a `.assistant/skills/`
-directory** (`/Workspace/.assistant/skills/` for the workspace, or
-`/Workspace/Users/<you>@databricks.com/.assistant/skills/` for a user — see "Installing the skills"
-above). That is functionally identical to how they sit under `skills/` here.
-
-Every cross-reference *between* skills is **sibling-relative** (e.g.
-`etl-development-framework/deployment-and-dab.md`), written relative to the skills' shared parent
-directory, not the repo root. So it resolves in **both** layouts — as long as all six skills move
-together and stay siblings. Do **not** rewrite these paths to add or strip a `skills/` prefix; a
-hard-coded prefix would break in one layout or the other. The only **repo-root-relative** paths are
-references to shared assets (`templates/conventions.yml`, `examples/…`), which are **not** installed
-into `.assistant/skills/`.
+---
 
 ## Versioning
 

@@ -55,7 +55,7 @@ docs/developer/                      Diátaxis docs on using the suite
 > **Skills live under `skills/` but reference each other with bare sibling-relative paths**
 > (`etl-development-framework/…`, not `skills/etl-development-framework/…`) so they resolve
 > identically when Genie Code uploads them flat to its root `skills/` folder. See `README.md`
-> "Skills layout" before moving or adding inter-skill references.
+> "Repo layout" before moving or adding inter-skill references.
 
 ## The two config knobs
 
