@@ -1,16 +1,13 @@
 import json, os, types, logging
 
+from notebook_source_util import agent_version_line, cell_containing
+
 NB = os.path.join(os.path.dirname(__file__), "..", "..", "agent", "dbx_vibe_modelling_agent.ipynb")
 
 
 def _full():
     nb = json.load(open(NB))
     return "\n".join("".join(c["source"]) for c in nb["cells"])
-
-
-def _cell(idx):
-    nb = json.load(open(NB))
-    return "".join(nb["cells"][idx]["source"])
 
 
 def _extract_func(src, name, end_anchor):
@@ -21,7 +18,7 @@ def _extract_func(src, name, end_anchor):
 
 
 def _load_helper(name, end_anchor):
-    src = _cell(3)
+    src = cell_containing("def " + name + "(")
     code = _extract_func(src, name, end_anchor)
     ns = {"logger": logging.getLogger("vov2-test")}
     exec(code, ns)
@@ -31,7 +28,7 @@ def _load_helper(name, end_anchor):
 def _load_region(start_anchor, end_anchor, names):
     # extract a contiguous (possibly indented) source region, dedent, exec, return requested names
     import textwrap, ast as _ast
-    src = _cell(3)
+    src = cell_containing(start_anchor)
     i = src.index(start_anchor)
     j = src.index(end_anchor, i)
     code = textwrap.dedent(src[i:j])
@@ -130,7 +127,7 @@ def test_unescape_leaves_normal_multiline_code_untouched():
 # FIX 4 (static): AST gate allows non-destructive introspection
 # ============================================================
 def test_ast_gate_allows_introspection_blocks_bypass():
-    s = _cell(3)
+    s = _full()
     i = s.index("if fn.id in (")
     tup = s[i:s.index(")", i) + 1]  # the forbidden-call tuple itself
     for allowed in ("globals", "locals", "vars", "dir"):
@@ -143,7 +140,7 @@ def test_ast_gate_allows_introspection_blocks_bypass():
 # FIX 2 (static): generated code passed via workdir file, not -c argv
 # ============================================================
 def test_sandbox_runs_code_from_file_not_argv():
-    s = _cell(3)
+    s = _full()
     assert '"-I", "-S", "-c", runner' not in s, "code still passed via -c argv (MAX_ARG_STRLEN risk)"
     assert '_runner_path = os.path.join(workdir, "_vov_runner.py")' in s
     assert '_rf.write(runner)' in s
@@ -155,7 +152,7 @@ def test_sandbox_runs_code_from_file_not_argv():
 # FIX 1 (static): credit injection wired before the noop_failed branch
 # ============================================================
 def test_deterministic_credit_wired_before_noop():
-    s = _cell(3)
+    s = _full()
     assert "if _is_noop_diff and not _is_already_satisfied:" in s
     i = s.index("if _is_noop_diff and not _is_already_satisfied:")
     seg = s[i:i + 1400]
@@ -168,8 +165,9 @@ def test_deterministic_credit_wired_before_noop():
 # FIX 1 (static): named-target prompt no longer hard-raises
 # ============================================================
 def test_named_target_prompt_offers_already_satisfied():
-    s = _cell(3)
-    assert "vov-named-already-satisfied-no-raise" in s
+    s = _full()
+    assert "already-satisfied-in-model" in s
+    assert "vov-verify-already-satisfied" in s
     assert "emit ONLY in case (b)" in s
 
 
@@ -177,7 +175,7 @@ def test_named_target_prompt_offers_already_satisfied():
 # FIX 5 (static): retry hints for no-mutator + list-attr bug
 # ============================================================
 def test_retry_hints_present():
-    s = _cell(3)
+    s = _full()
     assert "v393-hint-no-mutator" in s
     assert "v393-hint-list-attr" in s
     assert "MISSING MUTATOR" in s
@@ -188,7 +186,7 @@ def test_retry_hints_present():
 # FIX 7 (static): sandbox dump relocated to logs folder
 # ============================================================
 def test_sandbox_dump_relocated_to_logs():
-    s = _cell(11)
+    s = _full()
     assert '_sandbox_dump_dir = config["TARGET_VOLUME"] + "/sandbox"' not in s
     assert '_sandbox_dump_dir = os.path.join(log_dir, "sandbox")' in s
     assert "vov-sandbox-dump-in-logs" in s
@@ -299,7 +297,7 @@ def test_ast_still_blocks_eval():
 # GAP A/B/C (static): FIRED anchors present
 # ============================================================
 def test_gap_fired_anchors_present():
-    s = _cell(3)
+    s = _full()
     assert "vov-ast-allow-yield FIRED" in s
     assert "vov-rebind-aliased-import FIRED" in s
     assert "vov-deterministic-type-credit" in s
@@ -310,7 +308,8 @@ def test_gap_fired_anchors_present():
 # version
 # ============================================================
 def test_version_is_393():
-    assert '__AGENT_VERSION__ = "4.2.7"' in _cell(1)
+    """The constant tracks the live release, so a bump cannot redden this file."""
+    agent_version_line()
 
 
 if __name__ == "__main__":

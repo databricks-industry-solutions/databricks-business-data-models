@@ -89,17 +89,25 @@ def test_metadata_absent_when_model_has_none():
 # ---------------- FIX B: column-level remove_fk verification ----------------
 
 def _run_remove_branch(ll, fk_attrs, tl, target):
-    """Run the EXACT deployed remove-verb branch as a function body."""
+    """Run the EXACT deployed remove-verb branch as a function body.
+
+    The slice starts at _rel_needles (v4.8.2) rather than _rel_linked, because the
+    needle set is what _rel_linked reads. _rtl and _rel_canon are passed in as the
+    identity case (target already canonical, no extra resolution), which is the
+    pre-v4.8.2 matching behaviour these cases were written against.
+    """
     src = _load_src()
     block = _slice(src,
-                   '                _rel_linked = [a for a in fk_attrs',
+                   '                _rel_needles = {tl, _rtl} | _rel_canon',
                    '                if any(kw in ll for kw in ("link", "connect", "fk", "foreign key")):\n')
     body = textwrap.indent(textwrap.dedent(block), "    ")
-    fn = "import re\ndef _f(self, ll, fk_attrs, tl, target, req):\n" + body + "    return {'status': 'no-branch'}\n"
+    fn = ("import re\ndef _f(self, ll, fk_attrs, tl, target, req, _rtl, _rel_canon):\n"
+          + body + "    return {'status': 'no-branch'}\n")
     _self = types.SimpleNamespace(logger=logging.getLogger("v332test"))
     ns = {}
     exec(fn, ns, ns)
-    return ns["_f"](_self, ll, fk_attrs, tl, target, types.SimpleNamespace(id="VREQ-009"))
+    return ns["_f"](_self, ll, fk_attrs, tl, target,
+                    types.SimpleNamespace(id="VREQ-009"), tl, set())
 
 
 def test_remove_fk_column_level_fulfilled_when_named_column_removed():

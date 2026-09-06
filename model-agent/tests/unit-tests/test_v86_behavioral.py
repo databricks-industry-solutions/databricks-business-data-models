@@ -3,7 +3,7 @@ import json
 import re
 import pytest
 
-NB_PATH = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB_PATH = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 @pytest.fixture(scope="module")

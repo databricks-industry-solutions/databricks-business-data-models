@@ -71,24 +71,6 @@ class TestR7StrictPreserve:
 # ---------------------------------------------------------------------------
 # P0.83-DECIMAL-FIX — pre-spark coerce in _build_df_from_pool_spec
 # ---------------------------------------------------------------------------
-class TestPoolSpecDecimalCoercePreSpark:
-    def test_alias_present(self, agent_src):
-        assert "pool-spec-decimal-coerce-pre-spark" in agent_src
-
-    def test_coerce_called_before_create_dataframe(self, agent_src):
-        # The new coerce block must call _coerce_decimal_to_float BEFORE the
-        # spark.createDataFrame in _build_df_from_pool_spec.
-        body = agent_src
-        idx_alias = body.find("pool-spec-decimal-coerce-pre-spark")
-        assert idx_alias > 0
-        idx_coerce = body.find("_coerce_decimal_to_float", idx_alias)
-        idx_create = body.find("spark.createDataFrame(rows, schema=fb_schema)",
-                               idx_alias)
-        assert idx_coerce < idx_create, (
-            "decimal coerce must happen BEFORE spark.createDataFrame"
-        )
-
-
 # ---------------------------------------------------------------------------
 # JOBTAGS-DOWNGRADE — job-deleted is INFO not WARNING
 # ---------------------------------------------------------------------------

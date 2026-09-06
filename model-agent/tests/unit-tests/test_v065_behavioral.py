@@ -32,7 +32,7 @@ Bundle of 3 root-cause fixes against findings from the v0.6.3 telecom v1 audit:
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _agent_src() -> str:
@@ -246,14 +246,14 @@ def test_v065_no_regression_from_v064_aliases():
 
 def test_v065_readme_version_bumped():
     """readme.md current version must be v0.6.5."""
-    with open("/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md") as f:
+    with open("/Users/user/Documents/projects/vibe-modelling-agent/readme.md") as f:
         readme = f.read()
     assert "v0.6.5" in readme, "readme not bumped to v0.6.5"
 
 
 def test_v065_readme_history_entry_present():
     """readme.md must list the v0.6.5 history row."""
-    with open("/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md") as f:
+    with open("/Users/user/Documents/projects/vibe-modelling-agent/readme.md") as f:
         readme = f.read()
     assert re.search(r"v0\.6\.5", readme), "v0.6.5 history row missing"
     assert "immutable-early-exit" in readme or "IMMUTABLE-EARLY-EXIT" in readme

@@ -109,4 +109,7 @@ def test_fail_pre_capture_fn_absent_in_pre_patch():
 def test_callsites_thread_widgets_values():
     """PASS-POST: exit call sites pass widgets_values so the capture can reach the volume logger."""
     src = notebook_concat_source()
-    assert src.count('_safe_notebook_exit(widgets_values.get("_notebook_exit_result"), widgets_values)') == 4
+    plain = src.count("_safe_notebook_exit(widgets_values.get(\"_notebook_exit_result\"))")
+    threaded = src.count('_safe_notebook_exit(widgets_values.get("_notebook_exit_result"), widgets_values)')
+    assert plain == 0, "every exit call site must thread widgets_values through"
+    assert threaded >= 3, f"expected the operation exit call sites to thread widgets_values, found {threaded}"

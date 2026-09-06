@@ -18,7 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vov_v2_marathon as M
 
-REPO = "/Users/amr.ali/Documents/projects/lakehouse-business-data-models"
+REPO = "/Users/user/Documents/projects/lakehouse-business-data-models"
 IND_PROFILE = {ind: prof for prof, inds in M.ASSIGN.items() for ind in inds}
 # v3.8.0 output-parity-samples-csv: samples/*.csv are now first-class artifacts (install reads them,
 # reference repo ships them) so they are NO LONGER pruned on export.

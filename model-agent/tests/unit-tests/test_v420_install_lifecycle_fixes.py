@@ -42,18 +42,6 @@ def test_agent_version_is_420():
 # RC1 — generate-samples print UnboundLocalError (tests 05/08)
 # ---------------------------------------------------------------------------
 
-def test_rc1_gensamples_captures_builtin_print_via_module():
-    """The fix must capture print via the `builtins` module, never by reading the
-    bare name `print` (which becomes a function-local because of the later
-    `def print(...)`)."""
-    src = _nb_source()
-    assert "v420-gensamples-print-unbound" in src, "RC1 alias/marker missing"
-    assert "import builtins as _sg_builtins" in src
-    assert "_builtin_print = _sg_builtins.print" in src
-    # the original buggy bare-read assignment must be gone
-    assert "_builtin_print = print\n" not in src, "buggy bare `_builtin_print = print` still present"
-
-
 def test_rc1_behavioral_old_pattern_raises_new_pattern_works():
     """Proves the failure mode and the fix at the language level: the OLD pattern
     (read bare `print` then `def print`) raises UnboundLocalError; the NEW pattern

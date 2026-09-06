@@ -1,0 +1,15 @@
+{
+  "name": "model-viewer",
+  "version": "1.0.0",
+  "description": "Data Model Viewer - interactive graph visualization",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

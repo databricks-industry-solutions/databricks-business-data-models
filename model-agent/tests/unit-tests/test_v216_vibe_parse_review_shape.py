@@ -210,8 +210,8 @@ def _classify(vibe_text: str, n_req: int) -> bool:
     return n_req <= 2 and len(vibe_text) >= 2000 and signals >= 2
 
 
-HC_FIXTURE_PATH = Path("/Users/amr.ali/vibe_inputs/hc_feedback_vibes.md")
-RT_FIXTURE_PATH = Path("/Users/amr.ali/vibe_inputs/rt_feedback_vibes.md")
+HC_FIXTURE_PATH = Path("/Users/user/vibe_inputs/hc_feedback_vibes.md")
+RT_FIXTURE_PATH = Path("/Users/user/vibe_inputs/rt_feedback_vibes.md")
 
 
 def test_v216_detector_fires_on_hc_feedback():

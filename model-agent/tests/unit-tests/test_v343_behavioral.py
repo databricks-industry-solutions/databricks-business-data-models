@@ -2,7 +2,7 @@ import json
 import re
 import textwrap
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _cell_src(idx):

@@ -21,6 +21,7 @@ FAILS on pre-v3.7.1 HEAD (2 user-pinned domains rejected by the hardcoded 3-floo
 PASSES post-fix. Negative controls prove selectivity: no widget keeps the 3-floor, and a
 user who pins 2 but the LLM returns 1 still fails (floor still protects).
 """
+import ast
 import json
 import os
 import re
@@ -33,6 +34,22 @@ def _src():
     return "".join("".join(c["source"]) for c in nb["cells"] if c.get("cell_type") == "code")
 
 
+def _coerce_helpers():
+    """Slice the real coerce helpers from cell 25 so the isolated SmartWorkerValidator
+    (whose methods reference _v466_coerce_llm_obj after v4.6.6 hardening) execs cleanly."""
+    nb = json.load(open(NB))
+    cell25 = "".join(nb["cells"][25]["source"])
+    tree = ast.parse(cell25)
+    wanted = {"_coerce_dict", "_coerce_list_of_dicts", "_v466_coerce_llm_obj"}
+    body = [
+        n for n in tree.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in wanted
+    ]
+    ns = {"json": json, "re": re, "logging": __import__("logging")}
+    exec(compile(ast.Module(body=body, type_ignores=[]), "<cell25>", "exec"), ns)
+    return {k: ns[k] for k in wanted}
+
+
 def _extract_class(name):
     src = _src()
     m = re.search(r"\nclass " + re.escape(name) + r"\b[\s\S]*?\n(?=\n(?:class |def )[A-Za-z_])", "\n" + src)
@@ -41,7 +58,7 @@ def _extract_class(name):
 
 
 def _load_validator():
-    g = {"json": json, "re": re, "_DOMAIN_CEILING_FACTOR": 1.5}
+    g = {"json": json, "re": re, "_DOMAIN_CEILING_FACTOR": 1.5, **_coerce_helpers()}
     exec(_extract_class("SmartWorkerValidator"), g)
     return g["SmartWorkerValidator"]
 

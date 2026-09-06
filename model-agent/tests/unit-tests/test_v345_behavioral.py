@@ -2,12 +2,17 @@ import json
 import re
 import textwrap
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+from notebook_source_util import cell_containing
 
 
-def _cell_src(idx):
-    nb = json.load(open(NB))
-    return "".join(nb["cells"][idx]["source"])
+def _cell_src(marker):
+    """The code cell that owns `marker`.
+
+    This used to take a cell INDEX. The notebook grew, every index drifted, and all
+    nine behavioral tests below stopped reaching the code they name while still
+    reporting a failure that looked like a product bug.
+    """
+    return cell_containing(marker)
 
 
 def _slice(src, start_marker, end_marker, include_end=False):
@@ -21,7 +26,7 @@ def _slice(src, start_marker, end_marker, include_end=False):
 
 # ---- version anchor (forward-compatible: v3.4.5 fixes must persist at or beyond 3.4.5) ----
 def test_v345_version_constant():
-    src = _cell_src(1)
+    src = _cell_src('__AGENT_VERSION__ = "')
     m = re.search(r'__AGENT_VERSION__ = "(\d+)\.(\d+)\.(\d+)"', src)
     assert m, "version constant not found"
     assert tuple(int(x) for x in m.groups()) >= (3, 4, 5)
@@ -29,7 +34,7 @@ def test_v345_version_constant():
 
 # ---- mutator-json-literal-alias: prefix binds null/true/false ----
 def test_v345_prefix_aliases_json_literals():
-    src = _cell_src(3)
+    src = _cell_src("null = None")
     # extract the raw prefix string body and assert the aliases are present + bind correctly
     assert "null = None" in src
     assert "true = True" in src
@@ -45,7 +50,7 @@ def test_v345_prefix_aliases_json_literals():
 
 # ---- retry-feedback hint table (behavioral) ----
 def _exec_hints():
-    src = _cell_src(3)
+    src = _cell_src("def _v204_ast_class_hints(")
     block = _slice(src, "def _v204_ast_class_hints(", "return ", include_end=False)
     # the function ends after building/returning hints; slice generously to the final return
     full = src[src.index("def _v204_ast_class_hints("):]
@@ -57,7 +62,7 @@ def _exec_hints():
     class _L:
         def info(self, *a, **k):
             pass
-    ns = {"logger": _L()}
+    ns = {"logger": _L(), "re": re}
     exec(block, ns)
     return ns["_v204_ast_class_hints"]
 
@@ -74,12 +79,19 @@ def test_v345_undefined_name_hint_fires():
 
 
 def test_v345_list_dict_shape_hint_fires():
+    # The v3.4.5 hint was worded "LIST/DICT SHAPE". v4.0.2 suppresses that generic
+    # wording once a TYPE-ACCURATE hint fires (so the retry is not given contradictory
+    # dict advice for a list), and v4.1.9 brought `list` into that typed path. What must
+    # hold across those rewrites is the guarantee, not the label: the trace still yields
+    # a hint that names both shapes and teaches the real model collections.
     h = _exec_hints()
     out = h("mutator raised: AttributeError: 'list' object has no attribute 'get'")
-    assert out and "LIST/DICT SHAPE" in out
-    assert "data_products" in out  # teaches the real model shape
+    assert out, "a list/.get trace must still produce a hint"
+    assert "LIST" in out and "DICT" in out
+    assert "attributes" in out or "products" in out  # teaches the real model shape
     out2 = h("AttributeError: 'dict' object has no attribute 'append'")
-    assert "LIST/DICT SHAPE" in out2
+    assert out2 and "LIST" in out2 and "DICT" in out2
+    assert "attributes" in out2 or "products" in out2
 
 
 def test_v345_hint_nontautology_clean_trace_returns_empty():
@@ -91,7 +103,7 @@ def test_v345_hint_nontautology_clean_trace_returns_empty():
 
 # ---- gt-tag-prefix-compound-violation: per-token prefix check (behavioral) ----
 def _exec_prefix_checker(prefix="gov_transport_"):
-    src = _cell_src(9)
+    src = _cell_src("def _key_violates_prefix(_k):")
     # universal-token helper
     uni = _slice(src, '_UNIVERSAL_TAGS = {"pii"',
                  "return all(_is_universal_token(p) for p in _parts)", include_end=True)
@@ -123,25 +135,35 @@ def test_v345_compound_violation_nontautology():
 
 
 # ---- mv-column-prevalidate-prune: keep MV, prune offending blocks (behavioral) ----
+def _real_sql_kw():
+    """The `_mvcp_SQL_KW` the notebook actually uses."""
+    src = _cell_src("_mvcp_SQL_KW = set([")
+    block = _slice(src, "_mvcp_SQL_KW = set([", "])", include_end=True)
+    ns = {}
+    exec(textwrap.dedent(block), ns)
+    return ns["_mvcp_SQL_KW"]
+
+
 def _exec_mv_prune():
-    src = _cell_src(21)
+    src = _cell_src("def _mvcp_bad_in_expr(_expr_raw):")
     block = _slice(src, "def _mvcp_bad_in_expr(_expr_raw):",
                    "_drop_reasons2.append((_vname, f\"physical `{_src_sch}.{_src_tbl}` missing",
                    include_end=True)
     block = textwrap.dedent(block)
     wrapped = (
         "def run(_stmt, _src_cols):\n"
-        "    _kept2 = []; _drop_reasons2 = []\n"
+        "    _kept2 = []; _drop_reasons2 = []; _rename_reasons2 = []\n"
         "    _src_sch, _src_tbl = 'hr', 'position'\n"
         "    for _ in [0]:\n"
         + textwrap.indent(block, "        ")
-        + "    return _kept2, _drop_reasons2\n"
+        + "    return _kept2, _drop_reasons2, _rename_reasons2\n"
     )
     ns = {
         "_mvcp_re": re,
         "_mvcp_token_re": re.compile(r"\b([a-z_][a-z0-9_]*)\b"),
-        "_mvcp_SQL_KW": {"sum", "case", "when", "then", "else", "end", "count", "round",
-                         "nullif", "and", "or"},
+        # The notebook's own denylist, not a stub of it: a stub that omitted `distinct`
+        # made a DISTINCT aggregate look like a reference to a missing column.
+        "_mvcp_SQL_KW": _real_sql_kw(),
         "_extract_metric_view_name_from_statement": lambda s: "hr_vacancy_rate",
     }
     exec(wrapped, ns)
@@ -170,7 +192,7 @@ _MV_STMT = (
 def test_v345_mv_prune_keeps_view_drops_bad_dimension():
     run = _exec_mv_prune()
     # physical hr.position HAS cost_center_id + vacancy_status, but NOT 'description'
-    kept, reasons = run(_MV_STMT, {"position_id", "cost_center_id", "vacancy_status"})
+    kept, reasons, _renames = run(_MV_STMT, {"position_id", "cost_center_id", "vacancy_status"})
     assert len(kept) == 1, "the MV must be KEPT (not dropped) after pruning"
     out = kept[0]
     # the bad dimension is pruned, the good dimension + the real measure survive
@@ -184,7 +206,7 @@ def test_v345_mv_prune_keeps_view_drops_bad_dimension():
 def test_v345_mv_prune_nontautology_clean_mv_unchanged():
     # NON-TAUTOLOGY: an MV whose every column resolves must be kept verbatim, no prune reason.
     run = _exec_mv_prune()
-    kept, reasons = run(_MV_STMT, {"position_id", "cost_center_id", "vacancy_status", "description"})
+    kept, reasons, _renames = run(_MV_STMT, {"position_id", "cost_center_id", "vacancy_status", "description"})
     assert len(kept) == 1
     assert "Position Description" in kept[0]  # bad dim is now valid -> kept
     assert reasons == []
@@ -192,7 +214,7 @@ def test_v345_mv_prune_nontautology_clean_mv_unchanged():
 
 # ---- mv15-none-resp-guard: post-call resp shape guard (behavioral) ----
 def test_v345_mv15_none_resp_guard_present_and_before_get():
-    src = _cell_src(9)
+    src = _cell_src("alias=mv15-none-resp-guard")
     assert "alias=mv15-none-resp-guard" in src
     # the guard MUST sit BEFORE the unguarded .get on the happy path
     g = src.index("if not isinstance(resp, dict):")

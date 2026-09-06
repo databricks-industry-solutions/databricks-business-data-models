@@ -156,11 +156,13 @@ class TestMvFallbackEmitLive:
     def test_uses_extractors_not_undefined_var(self, agent_src):
         """Must call the new extractor helpers (not the undefined _mv_source)."""
         # The new path uses _extract_metric_view_target_from_statement + _extract_metric_view_source_from_statement
-        block_start = agent_src.find("[mv-fallback-emit-live FIRED]")
-        assert block_start > 0
-        slice_around = agent_src[max(0, block_start - 1500):block_start + 600]
-        assert "_extract_metric_view_target_from_statement" in slice_around
-        assert "_extract_metric_view_source_from_statement" in slice_around
+        fn_start = agent_src.find("def _v467_install_mv_fallback")
+        assert fn_start > 0
+        block_start = agent_src.find("[mv-fallback-emit-live FIRED]", fn_start)
+        assert block_start > fn_start
+        installer = agent_src[fn_start:block_start]
+        assert "_extract_metric_view_target_from_statement" in installer
+        assert "_extract_metric_view_source_from_statement" in installer
 
     def test_actually_installs_via_execute_sql(self, agent_src):
         """The fallback path must call execute_sql, not just log."""

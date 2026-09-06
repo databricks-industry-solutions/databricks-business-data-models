@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vov_v2_marathon as M
 
-AGENT_PATH = "/Users/user@databricks.com/dbx_vibe_modelling_agent_v368"
+AGENT_PATH = "/Users/user@example.com/dbx_vibe_modelling_agent_v368"
 BUDGET_S = 54000          # 15h user-directive agent budget -> runtime_budget_seconds
 JOB_TIMEOUT_S = 57600     # 16h job ceiling (15h agent + 1h teardown margin)
 LOCAL_STAGE = "/tmp/basemvm"

@@ -20,6 +20,17 @@ def nb_text():
     return AGENT_NB.read_text()
 
 
+def _cell_with(nb_cells, needle):
+    """The code cell that owns `needle`.
+
+    Cell indices drift every time a cell is added or removed, so locate the cell
+    by the code it contains instead of pinning an index.
+    """
+    hits = [src for src in nb_cells.values() if needle in src]
+    assert len(hits) == 1, f"expected exactly 1 cell containing {needle!r}, found {len(hits)}"
+    return hits[0]
+
+
 def test_agent_version_at_least_084(nb_cells):
     src = nb_cells[1]
     m = re.search(r'__AGENT_VERSION__\s*=\s*"([^"]+)"', src)
@@ -37,8 +48,8 @@ def test_v84_alias_present(nb_text, alias):
     assert alias in nb_text, f"alias {alias} missing from notebook"
 
 
-def test_p58_fires_log_marker_in_cell1(nb_cells):
-    src = nb_cells[1]
+def test_p58_fires_log_marker(nb_cells):
+    src = _cell_with(nb_cells, "install-vov-handoff-allow-overwrite")
     assert "[install-vov-handoff-allow-overwrite FIRED]" in src, (
         "P58 must emit FIRED marker"
     )
@@ -50,14 +61,14 @@ def test_p58_fires_log_marker_in_cell1(nb_cells):
 
 
 def test_p58_only_promotes_when_current_greater_than_max_prior(nb_cells):
-    src = nb_cells[1]
+    src = _cell_with(nb_cells, "install-vov-handoff-allow-overwrite")
     assert "if _max_prior < _cur_v_int:" in src, (
         "P58 must check current > max_prior before allowing overwrite"
     )
 
 
 def test_p58_sits_before_existing_prior_install_match(nb_cells):
-    src = nb_cells[1]
+    src = _cell_with(nb_cells, "install-vov-handoff-allow-overwrite")
     p58_ix = src.find("install-vov-handoff-allow-overwrite")
     legacy_ix = src.find("if _mm_hits > 0:")
     assert 0 < p58_ix < legacy_ix, (
@@ -67,7 +78,7 @@ def test_p58_sits_before_existing_prior_install_match(nb_cells):
 
 
 def test_p58_requires_current_version_at_least_2(nb_cells):
-    src = nb_cells[1]
+    src = _cell_with(nb_cells, "install-vov-handoff-allow-overwrite")
     assert "_cur_v_int > 1" in src, "P58 must require current_version >= 2"
 
 
@@ -98,7 +109,7 @@ def test_p59_cosmetic_regex_includes_safe_patterns(nb_cells):
     m = re.search(r"_p59_cosmetic_re\s*=\s*re\.compile\(r'\(\?i\)\(([^)]+)\)'\)", src)
     assert m, "P59 cosmetic regex pattern not found"
     pattern = m.group(1)
-    for must in ("description", "sample", "faker", "observability", "kpi", "comment"):
+    for must in ("description", "sample", "observability", "kpi", "comment"):
         assert must in pattern, (
             f"P59 cosmetic regex missing '{must}' pattern: {pattern}"
         )

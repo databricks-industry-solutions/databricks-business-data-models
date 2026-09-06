@@ -101,7 +101,7 @@ def _load_backup_module(path: Path):
     mod = types.ModuleType("agent_helpers_v405")
     mod.__dict__.update({"spark": _Stub(), "dbutils": _Stub(),
                          "displayHTML": lambda *a, **k: None, "SparkSession": _Stub(),
-                         "_FAKER_AVAILABLE": False, "_POOL_ENGINE_AVAILABLE": True,
+                         "_POOL_ENGINE_AVAILABLE": True,
                          "_OBS_AVAILABLE": False})
     _BLOCKED = {"pyspark", "databricks", "delta", "pandas", "numpy", "IPython",
                 "ipywidgets", "matplotlib", "plotly"}

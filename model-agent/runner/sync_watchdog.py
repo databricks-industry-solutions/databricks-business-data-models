@@ -20,7 +20,7 @@ Behaviour:
   - Polls every POLL_INTERVAL_S (default 120s)
   - For each cloud, lists job names matching 'dbx_vibe_*_pipeline_ecm_mvm_v1'
   - For each job, gets latest run; if TERMINATED/SUCCESS and industry not in
-    /Users/amr.ali/Documents/projects/vibe-business-data-models/<industry>/,
+    /Users/user/Documents/projects/vibe-business-data-models/<industry>/,
     runs sync_to_repo for that industry
   - Tracks pushed-industries in state file so we don't redo work on restart
   - Logs everything to a single rotating log file
@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-REPO_PATH = "/Users/amr.ali/Documents/projects/vibe-business-data-models"
+REPO_PATH = "/Users/user/Documents/projects/vibe-business-data-models"
 STATE_FILE = os.path.expanduser("~/claude/vibe-agent/sync_watchdog_state.json")
 LOG_FILE = os.path.expanduser("~/claude/vibe-agent/sync_watchdog.log")
 LOCK_FILE = os.path.expanduser("~/claude/vibe-agent/repo_sync.lock")

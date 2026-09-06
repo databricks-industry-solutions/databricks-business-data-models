@@ -25,6 +25,7 @@ __pycache__/
 *.ipynb.*.bak
 *.ipynb.v*
 *.bak
+*.bak-*
 *bak
 *_BACKUP.ipynb
 .scratch_audit/
@@ -34,3 +35,6 @@ __pycache__/
 *_src_scratch.py
 .databricks/
 **/.databricks/
+
+# Auto-generated coverage snapshot rewritten every pytest run
+tests/unit-tests/.last_coverage_report.json

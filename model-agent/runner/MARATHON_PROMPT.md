@@ -13,7 +13,7 @@ guardrails in `CLAUDE.md` (root-cause fixes, single-digit semver, brutal honesty
 ## 0. TL;DR — what to run
 
 ```bash
-cd /Users/amr.ali/Documents/projects/vibe-modelling-agent/runner
+cd /Users/user/Documents/projects/vibe-modelling-agent/runner
 
 # 0a. Deploy the current agent to ALL 5 workspaces (versioned path) — see §3.
 # 0b. Set AGENT_VER in vov_v2_marathon.py to match (§3.3).
@@ -107,9 +107,9 @@ Use background shells, never Cursor `Monitor` (needs approvals, stalls the loop)
 
 | Thing | Location |
 |---|---|
-| Agent repo (this repo) | `/Users/amr.ali/Documents/projects/vibe-modelling-agent` (branch `scratch/vibe-compiler-breakthrough`) |
-| Fork (publish target) | `amralieg/lakehouse-business-data-models` — local clone: `/Users/amr.ali/Documents/projects/_marathon_prep/fork` (branch `main`) |
-| Curated vibes source | `amralieg/vibe-business-data-models-v2` — local clone: `/Users/amr.ali/Documents/projects/_marathon_prep/repo2` |
+| Agent repo (this repo) | `/Users/user/Documents/projects/vibe-modelling-agent` (branch `scratch/vibe-compiler-breakthrough`) |
+| Fork (publish target) | `amralieg/lakehouse-business-data-models` — local clone: `/Users/user/Documents/projects/_marathon_prep/fork` (branch `main`) |
+| Curated vibes source | `amralieg/vibe-business-data-models-v2` — local clone: `/Users/user/Documents/projects/_marathon_prep/repo2` |
 | Agent notebook | `agent/dbx_vibe_modelling_agent.ipynb` (`__AGENT_VERSION__` in Cell 1) |
 | Orchestrator | `runner/vov_v2_marathon.py` (THE driver — reuse it, do not reinvent) |
 | Self-scoreboard audit | `runner/vov_audit_extract.py` |
@@ -153,7 +153,7 @@ must point at that exact version.
 Let `NN` = `__AGENT_VERSION__` minus dots (e.g. `3.8.5` → `385`). For each profile:
 
 ```bash
-WS="/Users/user@databricks.com"
+WS="/Users/user@example.com"
 for P in <profile> <profile> <profile> <profile> my-uae; do
   databricks workspace import "$WS/dbx_vibe_modelling_agent_v${NN}" \
     --file agent/dbx_vibe_modelling_agent.ipynb \
@@ -193,7 +193,7 @@ to the next single-digit semver → redeploy to all 5 → re-run that industry f
 it from the fork (so the install gets v1 ECM and VOV gets the curated next_vibes):
 
 ```bash
-FORK=/Users/amr.ali/Documents/projects/_marathon_prep/fork
+FORK=/Users/user/Documents/projects/_marathon_prep/fork
 for I in automotive construction consumer_goods health_insurance healthcare manufacturing \
          media_broadcasting ngo restaurants retail semiconductors travel_hospitality water_utilities; do
   mkdir -p /tmp/vov_stage/$I/model
@@ -214,7 +214,7 @@ derives a sensible default.
 ## 5. Launch
 
 ```bash
-cd /Users/amr.ali/Documents/projects/vibe-modelling-agent/runner
+cd /Users/user/Documents/projects/vibe-modelling-agent/runner
 python3 vov_v2_marathon.py --dry-run        # confirms cat names + task graph per industry
 nohup python3 vov_v2_marathon.py > ~/claude/vibe-agent/vov2_console.log 2>&1 &
 echo $! > ~/claude/vibe-agent/vov2.pid
@@ -257,7 +257,7 @@ The `run_page_url` is the platform URL to verify in the browser.
 unattended reconcile loops. Simplest robust option — a `--once` tick every few minutes:
 ```bash
 nohup bash -c 'while [ ! -f ~/claude/vibe-agent/vov2_KILL ]; do \
-  python3 /Users/amr.ali/Documents/projects/vibe-modelling-agent/runner/vov_v2_marathon.py --once \
+  python3 /Users/user/Documents/projects/vibe-modelling-agent/runner/vov_v2_marathon.py --once \
     >> ~/claude/vibe-agent/vov2_tick.log 2>&1; sleep 300; done' >/dev/null 2>&1 &
 ```
 Do NOT use Cursor's `Monitor` (needs approvals and stalls the loop). Use background shells.
@@ -384,7 +384,7 @@ DEFAULT target is the OLD `vibe-business-data-models` repo. **Retarget it to the
 `amralieg/lakehouse-business-data-models`), OR do the equivalent copy+commit directly:
 
 ```bash
-FORK=/Users/amr.ali/Documents/projects/_marathon_prep/fork
+FORK=/Users/user/Documents/projects/_marathon_prep/fork
 I=<industry>
 mkdir -p "$FORK/data-models/$I/v2/ecm" "$FORK/data-models/$I/v2/mvm"
 cp -r /tmp/vov_out/$I/v2/ecm/* "$FORK/data-models/$I/v2/ecm/"

@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Model Viewer</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;width:100%;overflow:hidden}
+body{font-family:'Segoe UI',sans-serif;background:#0f0f1a;color:#fff}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#1a1a2e}
+::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#666}
+input,select,button{font-family:inherit}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.fade-in{animation:fadeIn 0.2s ease-in}
+.btn{padding:8px 12px;background:#444;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:background 0.15s}
+.btn:hover{background:#555}
+.btn:active{background:#333}
+.btn-teal{background:#4ECDC4}
+.btn-teal:hover{background:#45b8b0}
+.btn-red{background:#FF6B6B}
+.btn-red:hover{background:#ff5555}
+.spinner{width:40px;height:40px;border:4px solid rgba(187,143,206,0.3);border-top:4px solid #BB8FCE;border-radius:50%;animation:spin 0.8s linear infinite}
+select{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 8px;font-size:12px;outline:none;cursor:pointer}
+select:focus{border-color:#4ECDC4}
+input[type=text]{background:#2a2a3e;color:#fff;border:1px solid #444;border-radius:4px;padding:8px 10px;font-size:11px;outline:none;width:100%}
+input[type=text]:focus{border-color:#4ECDC4}
+input[type=range]{accent-color:#4ECDC4;width:100%;cursor:pointer}
+.tag-pill{display:inline-block;padding:2px 8px;background:#BB8FCE;color:#fff;border-radius:10px;font-size:9px;margin-right:5px;margin-bottom:5px}
+.attr-row{padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.domain-box{background:rgba(255,255,255,0.05);border-radius:4px;padding:8px;margin-bottom:5px}
+.tooltip{position:absolute;background:rgba(20,20,40,0.98);color:#fff;font-size:11px;padding:6px 10px;border-radius:6px;border:1px solid #444;pointer-events:none;white-space:nowrap;z-index:5000;max-width:300px;white-space:normal}
+.tree-item{user-select:none}
+.tree-item:hover{background:rgba(255,255,255,0.04);border-radius:3px}
+.subdomain-label{font-size:11px;color:#aaa;font-weight:600}
+.section-header{font-size:12px;color:#4ECDC4;margin:10px 0 8px 0;font-weight:600}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ─────────────────────────────────────────────────────────
+   MODEL VIEWER - React + Cytoscape.js
+   ─────────────────────────────────────────────────────── */
+const {useState,useEffect,useRef,useCallback,useMemo,memo} = React;
+const h = React.createElement;
+
+// ── Constants ─────────────────────────────────────────────
+const DOMAIN_COLORS = [
+  '#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD',
+  '#98D8C8','#F7DC6F','#BB8FCE','#85C1E9','#F8B500','#00CED1',
+  '#FF7F50','#9FE2BF','#DE3163','#40E0D0','#CCCCFF','#FFB347',
+  '#77DD77','#AEC6CF','#FDFD96','#836953','#C23B22','#779ECB','#966FD6',
+];
+const DEFAULT_W = 500, DEFAULT_H = 400;
+const TREE_ATTR_CAP = 250;
+
+// ── Graph data extraction ──────────────────────────────────
+function extractGraph(dataModel) {
+  const nodes = [], edges = [];
+  const domainColors = {}, domainStats = {}, domainHierarchy = {};
+  let totalAttrs = 0, totalTags = 0;
+
+  const domains = dataModel.domains || [];
+  domains.forEach((domain, idx) => {
+    const dname = domain.name || `domain_${idx}`;
+    const color = DOMAIN_COLORS[idx % DOMAIN_COLORS.length];
+    domainColors[dname] = color;
+
+    let dAttr=0, dFk=0, dTag=0, dTbl=0;
+    const dCatCount={};
+    domainHierarchy[dname] = {
+      color, description: domain.description||'', division: domain.division||'',
+      tables:{}, subdomains:{}
+    };
+
+    (domain.products||[]).forEach(product => {
+      const tname = product.name||'';
+      const fullId = `${dname}.${tname}`;
+      const subdomain = product.subdomain||'';
+      // original physical table name (for the "semantic" toggle): prefer the source
+      // reference (catalog.schema.table) leaf, then table_name, then the product name.
+      const origName = ((product.reference||'').split('.').pop())||product.table_name||tname;
+      // physical catalog/schema from the source reference (catalog.schema.table),
+      // used by the Semantic toggle to relabel domain->catalog, subdomain->database.
+      const refParts=(product.reference||'').split('.');
+      const pCatalog=refParts.length>=3?refParts[0]:'';
+      const pSchema=refParts.length>=3?refParts[refParts.length-2]:'';
+      if(pCatalog) dCatCount[pCatalog]=(dCatCount[pCatalog]||0)+1;
+      dTbl++;
+
+      const attrs = product.attributes||[];
+      const attrList = attrs.map(a => {
+        // Handle tags as string or array; detect primary_key
+        const tagsVal = a.tags;
+        const isPk = a.primary_key===true || a.primary_key==='true'
+          || (typeof tagsVal==='string' && tagsVal.toLowerCase().includes('primary_key'))
+          || (Array.isArray(tagsVal) && tagsVal.some(t=>t.toLowerCase().includes('primary_key')));
+        const fk = (a.foreign_key_to||'').trim();
+        return {
+          name: a.name||'', type: a.type||'', fk, pk: isPk,
+          desc: a.description||a.desc||'', tags: Array.isArray(tagsVal)?tagsVal: tagsVal?[tagsVal]:[]
+        };
+      });
+
+      const fkCount = attrList.filter(a=>a.fk).length;
+      const tagArr = Array.isArray(product.tags)?product.tags: product.tags?[product.tags]:[];
+      dAttr+=attrList.length; dFk+=fkCount; dTag+=tagArr.length;
+      totalAttrs+=attrList.length; totalTags+=tagArr.length;
+
+      const tableEntry = {
+        full_id:fullId, description:product.description||'', tags:tagArr,
+        attributes:attrList, attribute_count:attrList.length, fk_count:fkCount, subdomain
+      };
+      domainHierarchy[dname].tables[tname] = tableEntry;
+
+      if(subdomain){
+        if(!domainHierarchy[dname].subdomains[subdomain])
+          domainHierarchy[dname].subdomains[subdomain]={tables:[],attr_count:0,fk_count:0,schemaCount:{}};
+        const sd=domainHierarchy[dname].subdomains[subdomain];
+        sd.tables.push(tname); sd.attr_count+=attrList.length; sd.fk_count+=fkCount;
+        if(pSchema) sd.schemaCount[pSchema]=(sd.schemaCount[pSchema]||0)+1;
+      }
+
+      nodes.push({
+        data:{id:fullId,label:tname,sem_label:tname,orig_label:origName,
+              orig_catalog:pCatalog,orig_schema:pSchema,
+              parent:`domain_${dname}`,type:'table',
+              domain:dname,subdomain,attribute_count:attrList.length,
+              fk_count:fkCount,tag_count:tagArr.length,color},
+        classes:'table-node'
+      });
+
+      attrList.forEach(attr=>{
+        if(!attr.fk) return;
+        const parts=attr.fk.split('.');
+        if(parts.length<2) return;
+        const targetId=`${parts[0]}.${parts[1]}`;
+        const targetCol=parts[2]||`${parts[1]}_id`;
+        // agent-synthesised FKs carry a `_dbx_fk_*` tag (declared UC FKs do not).
+        const isDbxFk=(attr.tags||[]).some(t=>/(^|_)dbx_fk/i.test(String(t)));
+        edges.push({
+          data:{
+            id:`edge_${fullId}_${targetId}_${attr.name}`,
+            source:fullId,target:targetId,label:attr.name,
+            source_domain:dname,target_domain:parts[0],
+            source_column:attr.name,target_column:targetCol,
+            source_table:tname,target_table:parts[1],fk_full:attr.fk,
+            dbx_fk:isDbxFk
+          },
+          classes:isDbxFk?'fk-edge dbx-fk-edge':'fk-edge'
+        });
+      });
+    });
+
+    domainStats[dname]={table_count:dTbl,attr_count:dAttr,fk_count:dFk,tag_count:dTag};
+    const domCatalog=Object.keys(dCatCount).sort((a,b)=>dCatCount[b]-dCatCount[a])[0]||'';
+    domainHierarchy[dname].catalog=domCatalog;
+    nodes.push({
+      data:{id:`domain_${dname}`,label:dname.toUpperCase(),
+            sem_label:dname.toUpperCase(),orig_label:domCatalog||dname.toUpperCase(),
+            orig_catalog:domCatalog,type:'domain',color,
+            division:domain.division||'',table_count:dTbl,attr_count:dAttr,
+            fk_count:dFk,tag_count:dTag,width:DEFAULT_W,height:DEFAULT_H},
+      classes:'domain-node'
+    });
+  });
+
+  return {nodes,edges,domainColors,domainStats,domainHierarchy,
+          totalAttrs,totalTags,
+          modelName:dataModel.name||'Data Model',
+          modelVersion:dataModel.version||''};
+}
+
+// ── Precompute indexes ─────────────────────────────────────
+function buildIndexes(graphData){
+  const {nodes,edges}=graphData;
+  const tableById={}, domainByName={}, tablesByDomain={};
+  const edgesBySource={}, edgesByTarget={}, edgesWithinDomain={};
+  nodes.forEach(n=>{
+    if(n.classes==='table-node'){
+      tableById[n.data.id]=n;
+      const d=n.data.domain;
+      if(d){(tablesByDomain[d]=tablesByDomain[d]||[]).push(n);}
+    } else if(n.classes==='domain-node'){
+      const k=n.data.id.replace('domain_','');
+      domainByName[k]=n;
+    }
+  });
+  edges.forEach(e=>{
+    const s=e.data.source,t=e.data.target;
+    (edgesBySource[s]=edgesBySource[s]||[]).push(e);
+    (edgesByTarget[t]=edgesByTarget[t]||[]).push(e);
+    const sd=s.split('.')[0],td=t.split('.')[0];
+    if(sd&&sd===td)(edgesWithinDomain[sd]=edgesWithinDomain[sd]||[]).push(e);
+  });
+  return {tableById,domainByName,tablesByDomain,edgesBySource,edgesByTarget,edgesWithinDomain};
+}
+
+// ── Clustered layout positions ─────────────────────────────
+function calcClusteredPositions(nodes, tableArrangement, domainSizes){
+  domainSizes=domainSizes||{};
+  const domainTables={};
+  nodes.forEach(n=>{if(n.classes==='table-node'){const d=n.data.domain||'unknown';(domainTables[d]=domainTables[d]||[]).push(n);}});
+  const domainNames=Object.keys(domainTables).sort();
+  const numDomains=domainNames.length;
+  if(!numDomains) return {};
+
+  // Compute each domain's actual box size
+  const boxSizes={};
+  domainNames.forEach(dname=>{
+    const sz=domainSizes[`domain_${dname}`]||{};
+    const tblCount=(domainTables[dname]||[]).length;
+    const autoW=Math.max(DEFAULT_W, Math.ceil(Math.sqrt(tblCount))*120);
+    const autoH=Math.max(DEFAULT_H, Math.ceil(Math.sqrt(tblCount))*100);
+    boxSizes[dname]={w:sz.width||autoW, h:sz.height||autoH};
+  });
+
+  // Outer ring: large enough that boxes don't overlap
+  const gap=80;
+  const circumference=domainNames.reduce((sum,d)=>{
+    const diag=Math.sqrt(boxSizes[d].w**2+boxSizes[d].h**2);
+    return sum+diag+gap;
+  },0);
+  let outerR=Math.max(800, circumference/(2*Math.PI));
+
+  const domainCenters={};
+  if(numDomains===1){
+    domainCenters[domainNames[0]]=[0,0];
+  } else {
+    domainNames.forEach((dname,i)=>{
+      const angle=(2*Math.PI*i/numDomains)-(Math.PI/2);
+      domainCenters[dname]=[outerR*Math.cos(angle), outerR*Math.sin(angle)];
+    });
+  }
+
+  const positions={};
+  domainNames.forEach(dname=>{
+    const tables=domainTables[dname]||[];
+    const [cx,cy]=domainCenters[dname];
+    const bw=boxSizes[dname].w, bh=boxSizes[dname].h;
+    const pad=40;
+
+    if(tableArrangement==='circle'){
+      // Circular arrangement inside the box
+      const r=Math.min(bw,bh)/2-pad;
+      if(tables.length===1){
+        positions[tables[0].data.id]={x:cx,y:cy};
+      } else {
+        tables.forEach((n,i)=>{
+          const a=(2*Math.PI*i/tables.length)-(Math.PI/2);
+          positions[n.data.id]={x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
+        });
+      }
+    } else {
+      // Grid arrangement inside the box
+      const usableW=bw-pad*2, usableH=bh-pad*2;
+      const cols=Math.max(1,Math.ceil(Math.sqrt(tables.length)));
+      const rows=Math.ceil(tables.length/cols);
+      const cellW=usableW/cols, cellH=usableH/rows;
+      tables.forEach((n,i)=>{
+        const col=i%cols, row=Math.floor(i/cols);
+        positions[n.data.id]={
+          x: cx-usableW/2+cellW/2+col*cellW,
+          y: cy-usableH/2+cellH/2+row*cellH
+        };
+      });
+    }
+    positions[`domain_${dname}`]={x:cx,y:cy};
+  });
+  return positions;
+}
+
+// ── Domain view positions ──────────────────────────────────
+function calcDomainViewPositions(filteredNodes){
+  const groups={};
+  filteredNodes.forEach(n=>{
+    if(n.classes==='table-node'||n.classes==='table-node domain-view-node'){
+      const p=n.data.parent||'__ungrouped__';
+      (groups[p]=groups[p]||[]).push(n);
+    }
+  });
+  if(!Object.keys(groups).length) return {};
+  const sorted=Object.entries(groups).sort((a,b)=>a[0]==='__ungrouped__'?1:b[0]==='__ungrouped__'?-1:a[0].localeCompare(b[0]));
+  const ns=130; // spacing between nodes inside a group
+  const pad=160; // extra padding around each group for subdomain box + label
+
+  // Calculate each group's bounding size including padding
+  const groupSizes=sorted.map(([,tables])=>{
+    const cols=Math.max(1,Math.ceil(Math.sqrt(tables.length)));
+    const rows=Math.ceil(tables.length/cols);
+    return {w:cols*ns+pad, h:rows*ns+pad, cols, rows};
+  });
+
+  const numGroups=sorted.length;
+  if(numGroups===1){
+    const tables=sorted[0][1];
+    const {cols}=groupSizes[0];
+    const positions={};
+    tables.forEach((n,i)=>{
+      const row=Math.floor(i/cols),col=i%cols;
+      positions[n.data.id]={x:(col-(cols-1)/2)*ns, y:(row-(Math.ceil(tables.length/cols)-1)/2)*ns};
+    });
+    return positions;
+  }
+
+  // Grid layout: pack subdomain boxes into rows/cols using max width/height per column/row
+  const gap=100;
+  const gCols=Math.ceil(Math.sqrt(numGroups));
+  const gRows=Math.ceil(numGroups/gCols);
+  const colWidths=new Array(gCols).fill(0);
+  const rowHeights=new Array(gRows).fill(0);
+  groupSizes.forEach((g,gi)=>{
+    const gc=gi%gCols, gr=Math.floor(gi/gCols);
+    colWidths[gc]=Math.max(colWidths[gc],g.w);
+    rowHeights[gr]=Math.max(rowHeights[gr],g.h);
+  });
+  const totalW=colWidths.reduce((s,w)=>s+w,0)+(gCols-1)*gap;
+  const totalH=rowHeights.reduce((s,h)=>s+h,0)+(gRows-1)*gap;
+  const colCenters=colWidths.map((w,i)=>{
+    let x=-totalW/2;
+    for(let k=0;k<i;k++) x+=colWidths[k]+gap;
+    return x+w/2;
+  });
+  const rowCenters=rowHeights.map((h,i)=>{
+    let y=-totalH/2;
+    for(let k=0;k<i;k++) y+=rowHeights[k]+gap;
+    return y+h/2;
+  });
+
+  const positions={};
+  sorted.forEach(([,tables],gi)=>{
+    const gc=gi%gCols, gr=Math.floor(gi/gCols);
+    const cx=colCenters[gc], cy=rowCenters[gr];
+    const {cols,rows}=groupSizes[gi];
+    tables.forEach((n,i)=>{
+      const row=Math.floor(i/cols),col=i%cols;
+      positions[n.data.id]={x:cx+(col-(cols-1)/2)*ns, y:cy+(row-(rows-1)/2)*ns};
+    });
+  });
+  return positions;
+}
+
+// ── Cytoscape stylesheet ──────────────────────────────────
+function getStylesheet(showDomains=true,sizeScale=1){
+  const s=sizeScale;
+  const fs=(px)=>Math.round(px*s)+'px';
+  const nd=(px)=>Math.round(px*s);
+  const labeledNode=(w,h,bw,bc,bg='data(color)')=>[
+    {selector:`node[bg="${bg}"]`,style:{}}
+  ];
+  const baseStyle=[
+    {selector:'node',style:{
+      content:'',textValign:'bottom',textHalign:'center',fontSize:'14px',fontWeight:'600',
+      fontFamily:'Segoe UI,Inter,-apple-system,sans-serif',
+    }},
+    {selector:'.table-node',style:{
+      shape:'ellipse',width:nd(22),height:nd(22),backgroundColor:'data(color)',
+      borderWidth:2,borderColor:'rgba(255,255,255,0.9)',
+      content:'data(label)',textValign:'bottom',textHalign:'center',
+      fontSize:fs(11),fontWeight:'500',color:'#ccc',textMarginY:nd(7),
+      textBackgroundColor:'rgba(20,20,40,0.85)',textBackgroundOpacity:1,
+      textBackgroundPadding:nd(2)+'px '+nd(5)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.domain-view-node',style:{
+      shape:'ellipse',width:nd(42),height:nd(42),backgroundColor:'data(color)',
+      borderWidth:3,borderColor:'rgba(255,255,255,0.95)',
+      content:'data(label)',textValign:'bottom',textHalign:'center',
+      fontSize:fs(15),fontWeight:'700',color:'#ffffff',
+      textOutlineWidth:0,textMarginY:nd(10),
+      textBackgroundColor:'rgba(40,40,60,0.92)',textBackgroundOpacity:1,
+      textBackgroundPadding:nd(4)+'px '+nd(8)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.table-node:selected',style:{
+      width:nd(35),height:nd(35),borderWidth:4,borderColor:'#FFD700',backgroundColor:'#FFD700',
+    }},
+    {selector:'.center-node',style:{
+      shape:'ellipse',width:nd(28),height:nd(28),backgroundColor:'data(color)',
+      borderWidth:3,borderColor:'#FFD700',
+      content:'data(label)',textValign:'bottom',textHalign:'center',
+      fontSize:fs(11),fontWeight:'600',color:'#ffffff',
+      textOutlineWidth:0,textMarginY:nd(8),
+      textBackgroundColor:'rgba(40,40,60,0.92)',textBackgroundOpacity:1,
+      textBackgroundPadding:nd(3)+'px '+nd(6)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.fk-source',style:{
+      shape:'ellipse',width:nd(22),height:nd(22),backgroundColor:'data(color)',
+      borderWidth:3,borderColor:'#10B981',
+      content:'data(label)',textValign:'bottom',textHalign:'center',
+      fontSize:fs(11),fontWeight:'600',color:'#ffffff',
+      textOutlineWidth:0,textMarginY:nd(8),
+      textBackgroundColor:'rgba(40,40,60,0.92)',textBackgroundOpacity:1,
+      textBackgroundPadding:nd(3)+'px '+nd(6)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.fk-target',style:{
+      shape:'ellipse',width:nd(22),height:nd(22),backgroundColor:'data(color)',
+      borderWidth:3,borderColor:'#F87171',
+      content:'data(label)',textValign:'bottom',textHalign:'center',
+      fontSize:fs(11),fontWeight:'600',color:'#ffffff',
+      textOutlineWidth:0,textMarginY:nd(8),
+      textBackgroundColor:'rgba(40,40,60,0.92)',textBackgroundOpacity:1,
+      textBackgroundPadding:nd(3)+'px '+nd(6)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    // Product/table focus view: bigger node sizes (override .fk-source/.fk-target shrink)
+    {selector:'.domain-view-node.fk-source',style:{
+      width:nd(60),height:nd(60),borderWidth:4,borderColor:'#10B981',
+      fontSize:fs(16),fontWeight:'700',textMarginY:nd(12),
+      textBackgroundPadding:nd(5)+'px '+nd(10)+'px',
+    }},
+    {selector:'.domain-view-node.fk-target',style:{
+      width:nd(60),height:nd(60),borderWidth:4,borderColor:'#F87171',
+      fontSize:fs(16),fontWeight:'700',textMarginY:nd(12),
+      textBackgroundPadding:nd(5)+'px '+nd(10)+'px',
+    }},
+    {selector:'.domain-view-node.center-node',style:{
+      width:nd(85),height:nd(85),borderWidth:6,borderColor:'#FFD700',
+      fontSize:fs(18),fontWeight:'700',textMarginY:nd(14),
+      textBackgroundPadding:nd(6)+'px '+nd(12)+'px',
+    }},
+    {selector:'edge',style:{
+      width:2,lineColor:'rgba(150,150,170,0.5)',
+      targetArrowColor:'rgba(150,150,170,0.7)',targetArrowShape:'triangle',
+      curveStyle:'bezier',opacity:0.8,arrowScale:1,
+    }},
+    {selector:'.outgoing-edge',style:{
+      width:2,lineColor:'#10B981',targetArrowColor:'#10B981',opacity:1,
+      label:'data(label)',fontSize:'9px',fontWeight:'600',color:'#ffffff',
+      textOutlineWidth:0,textBackgroundColor:'rgba(40,40,60,0.92)',
+      textBackgroundOpacity:1,textBackgroundPadding:'2px 5px',
+      textBackgroundShape:'roundrectangle',textRotation:'autorotate',
+    }},
+    {selector:'.incoming-edge',style:{
+      width:2,lineColor:'#F87171',targetArrowColor:'#F87171',opacity:1,
+    }},
+    {selector:'edge:selected',style:{
+      width:4,lineColor:'#FFD700',targetArrowColor:'#FFD700',opacity:1,
+    }},
+    {selector:'.attribute-node',style:{
+      shape:'round-rectangle',width:120,height:60,
+      backgroundColor:'data(color)',borderWidth:3,borderColor:'rgba(255,255,255,0.9)',
+      content:'data(label)',textValign:'center',textHalign:'center',
+      fontSize:'14px',fontWeight:'700',color:'#ffffff',
+    }},
+    {selector:'.attr-edge',style:{
+      width:2,lineColor:'#888',lineStyle:'dashed',
+      targetArrowColor:'#888',targetArrowShape:'triangle',curveStyle:'bezier',
+      opacity:0.7,label:'data(label)',fontSize:'10px',color:'#aaa',
+      textBackgroundColor:'rgba(40,40,60,0.9)',textBackgroundOpacity:1,
+      textBackgroundPadding:'3px 6px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.subdomain-node',style:{
+      shape:'round-rectangle',backgroundColor:'data(color)',backgroundOpacity:0.12,
+      borderWidth:3,borderColor:'data(color)',borderOpacity:0.5,borderStyle:'dashed',
+      content:'data(label)',textValign:'top',textHalign:'center',
+      fontSize:'26px',fontWeight:'700',color:'#ffffff',
+      textOutlineWidth:0,textMarginY:-18,padding:'50px',
+      textBackgroundColor:'rgba(30,30,50,0.95)',textBackgroundOpacity:1,
+      textBackgroundPadding:'10px 18px',textBackgroundShape:'roundrectangle',
+    }},
+  ];
+  const domainStyle=showDomains?{selector:'.domain-node',style:{
+    shape:'round-rectangle',
+    backgroundColor:'data(color)',backgroundOpacity:0.12,
+    borderWidth:3,borderColor:'data(color)',borderOpacity:0.4,
+    content:'data(label)',textValign:'top',textHalign:'center',
+    fontSize:'28px',fontWeight:'700',color:'#ffffff',
+    textOutlineWidth:0,textMarginY:-22,padding:'50px',
+    textBackgroundColor:'rgba(30,30,50,0.95)',textBackgroundOpacity:1,
+    textBackgroundPadding:'12px 20px',textBackgroundShape:'roundrectangle',
+  }}:{selector:'.domain-node',style:{
+    backgroundOpacity:0,borderWidth:0,content:'',padding:0,
+  }};
+  const subdomainHide=showDomains?{}:{selector:'.subdomain-node',style:{
+    width:0,height:0,backgroundOpacity:0,borderWidth:0,borderOpacity:0,content:'',padding:0,
+  }};
+  return [...baseStyle,domainStyle,...(subdomainHide.selector?[subdomainHide]:[])];
+
+}
+
+// ── LAYOUT CONFIGS ────────────────────────────────────────
+const LAYOUT_CONFIGS={
+  circle:{name:'circle',animate:false,fit:true,padding:40,avoidOverlap:true,spacingFactor:1.2},
+  concentric:{name:'concentric',animate:false,fit:true,padding:50,avoidOverlap:true,minNodeSpacing:10},
+  cose:{name:'cose',animate:false,fit:true,padding:50,nodeRepulsion:5000,idealEdgeLength:50,avoidOverlap:true,randomize:false},
+  grid:{name:'grid',animate:false,fit:true,padding:50,avoidOverlap:true,condense:true},
+  clustered:{name:'preset',animate:false,fit:true,padding:50},
+};
+
+// ── API helpers ────────────────────────────────────────────
+async function apiFetch(url){
+  const r=await fetch(url);
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Tree Component ─────────────────────────────────────────
+const TreeNode=memo(({domainName,domainData,expandedDomains,expandedTables,
+                      onToggleDomain,onToggleTable,onClickDomain,onClickTable,onClickAttr,searchTerm})=>{
+  const {color,tables={},subdomains={},division=''}=domainData;
+  const isExpanded=expandedDomains.has(domainName);
+  const tableEntries=useMemo(()=>Object.entries(tables).sort((a,b)=>a[0].localeCompare(b[0])),[tables]);
+  const st=searchTerm.toLowerCase();
+  const domainMatches=!st||domainName.toLowerCase().includes(st);
+  const matchingTables=useMemo(()=>!st?tableEntries:tableEntries.filter(([tn])=>tn.toLowerCase().includes(st)),[tableEntries,st]);
+  if(st&&!domainMatches&&!matchingTables.length) return null;
+  const showTables=isExpanded||(st&&matchingTables.length>0);
+  const visibleTables=st?matchingTables:tableEntries;
+  const visibleCount=visibleTables.length;
+  const divColors={'operations':'#E74C3C','business':'#3498DB','corporate':'#F39C12'};
+  const divAbbr={'operations':'OPS','business':'BIZ','corporate':'COR'};
+  const divLower=(division||'').toLowerCase();
+  const hasSubs=Object.keys(subdomains).length>0;
+
+  function renderTableRow(tname,tdata,indent){
+    const fullId=tdata.full_id||`${domainName}.${tname}`;
+    const attrs=tdata.attributes||[];
+    const sortedAttrs=[...attrs].sort((a,b)=>a.name.localeCompare(b.name));
+    const isTblExp=expandedTables.has(fullId);
+    return h('div',{key:fullId,style:{marginLeft:indent,marginBottom:1}},
+      h('div',{className:'tree-item',style:{display:'flex',alignItems:'center',padding:'4px 0',cursor:'pointer'}},
+        h('button',{
+          onClick:e=>{e.stopPropagation();onToggleTable(fullId);},
+          style:{width:18,height:18,padding:0,background:'transparent',border:'1px solid #444',
+                 borderRadius:3,color:'#aaa',cursor:'pointer',fontSize:12,lineHeight:'14px',
+                 marginRight:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}
+        },isTblExp?'−':'+'),
+        h('span',{style:{fontSize:10,marginRight:4}},'📊'),
+        h('span',{
+          style:{fontSize:11,color:'#4ECDC4',cursor:'pointer',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},
+          onClick:()=>onClickTable(fullId)
+        },tname),
+        h('span',{style:{fontSize:9,color:'#555',marginLeft:5}},'('+sortedAttrs.length+')')
+      ),
+      isTblExp&&h('div',{key:'attrs'},[
+        ...sortedAttrs.slice(0,TREE_ATTR_CAP).map(attr=>{
+        const isPk=attr.pk;
+        const isFk=!!attr.fk;
+        const icon=isPk?'🔑':isFk?'🔗':'•';
+        const iconColor=isPk?'#FFD700':isFk?'#FF6B6B':'#555';
+        const attrId=`${fullId}.${attr.name}`;
+        return h('div',{key:attrId,className:'tree-item',
+                        style:{display:'flex',alignItems:'center',padding:'3px 0',marginLeft:indent+24,cursor:'pointer'},
+                        onClick:()=>onClickAttr(attrId)},
+          h('span',{style:{fontSize:10,color:iconColor,marginRight:6,width:14,flexShrink:0}},icon),
+          h('span',{style:{fontSize:10,color:'#ccc',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},attr.name),
+          h('span',{style:{fontSize:9,color:'#666',marginLeft:5}},attr.type)
+        );
+      }),
+        sortedAttrs.length>TREE_ATTR_CAP&&h('div',{key:'__more',
+          style:{fontSize:9,color:'#888',fontStyle:'italic',marginLeft:indent+24,padding:'3px 0'}},
+          `… ${sortedAttrs.length-TREE_ATTR_CAP} more attributes (click the product to view all)`)
+      ])
+    );
+  }
+
+  return h('div',{style:{marginBottom:2}},
+    h('div',{className:'tree-item'},
+      h('div',{style:{display:'flex',alignItems:'center',padding:'6px 0'}},
+        h('button',{
+          onClick:e=>{e.stopPropagation();onToggleDomain(domainName);},
+          style:{width:20,height:20,padding:0,background:'transparent',border:'1px solid #555',
+                 borderRadius:3,color:'#fff',cursor:'pointer',fontSize:14,lineHeight:'16px',
+                 marginRight:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}
+        },isExpanded?'−':'+'),
+        h('div',{style:{width:12,height:12,background:color,borderRadius:3,marginRight:8,flexShrink:0}}),
+        h('span',{
+          style:{fontSize:12,color:'#ddd',cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1},
+          onClick:()=>onClickDomain(domainName)
+        },domainName.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())),
+        h('span',{style:{fontSize:10,color:'#666',marginLeft:5}},'('+visibleCount+')'),
+        divColors[divLower]&&h('span',{style:{
+          display:'inline-block',padding:'1px 4px',background:divColors[divLower],color:'#fff',
+          borderRadius:3,fontSize:8,fontWeight:'bold',marginLeft:5,flexShrink:0,lineHeight:'12px'
+        }},divAbbr[divLower]||divLower.slice(0,3).toUpperCase())
+      )
+    ),
+    showTables&&h('div',{},
+      hasSubs
+        ? h('div',{},
+            ...Object.keys(subdomains).sort().map(sdname=>{
+              const sdTables=visibleTables.filter(([,d])=>(d.subdomain||'')===sdname);
+              const ungrouped=visibleTables.filter(([,d])=>!(d.subdomain||''));
+              return [
+                h('div',{key:sdname,style:{marginLeft:28,marginBottom:1,borderBottom:'1px solid rgba(255,255,255,0.05)'}},
+                  h('div',{style:{display:'flex',alignItems:'center',padding:'5px 0'}},
+                    h('span',{style:{fontSize:8,color,marginRight:6}},'◆'),
+                    h('span',{className:'subdomain-label',style:{flex:1}},sdname.replace(/_/g,' ').replace(/-/g,' ')),
+                    h('span',{style:{fontSize:9,color:'#555',marginLeft:5}},'('+sdTables.length+')')
+                  )
+                ),
+                ...sdTables.map(([tn,td])=>renderTableRow(tn,td,42)),
+              ];
+            }).flat(),
+            ...visibleTables.filter(([,d])=>!(d.subdomain||'')).map(([tn,td])=>renderTableRow(tn,td,28))
+          )
+        : visibleTables.map(([tn,td])=>renderTableRow(tn,td,28))
+    )
+  );
+});
+
+// ── Node Info Panel ────────────────────────────────────────
+function NodeInfoPanel({selectedNode,selectedEdge,treeClick,graphData,domainSizes,setDomainSizes,filterState}){
+  if(!graphData) return h('div',{style:{padding:'15px'}},
+    h('h3',{className:'section-header',style:{borderBottom:'1px solid #444',paddingBottom:10,marginBottom:15}},'📌 Details'),
+    h('p',{style:{color:'#888',fontSize:12,fontStyle:'italic'}},'Click a node to see details'),
+    h('div',{style:{marginTop:20}},
+      h('p',{style:{color:'#4ECDC4',fontSize:11,fontWeight:'bold'}},'💡 Tips:'),
+      h('p',{style:{color:'#666',fontSize:10,marginTop:5}},'• Click node to focus'),
+      h('p',{style:{color:'#666',fontSize:10,marginTop:3}},'• Click domain to filter'),
+      h('p',{style:{color:'#666',fontSize:10,marginTop:3}},'• Double-click for FK view'),
+      h('p',{style:{color:'#666',fontSize:10,marginTop:3}},'• Click edge for details'),
+    )
+  );
+
+  const {domainHierarchy={},domainColors={},domainStats={}}=graphData;
+
+  // Edge info
+  if(selectedEdge&&(!treeClick)){
+    const e=selectedEdge;
+    const srcDomain=domainColors[e.source_domain]||'#888';
+    const tgtDomain=domainColors[e.target_domain]||'#888';
+    return h('div',{style:{padding:'15px',overflowY:'auto',height:'100%'}},
+      h('div',{style:{display:'flex',alignItems:'center',marginBottom:10}},
+        h('span',{style:{fontSize:20,marginRight:10}},'🔗'),
+        h('div',{},
+          h('span',{style:{fontSize:14,fontWeight:'bold',color:'#fff',display:'block'}},'Relationship'),
+          h('span',{style:{fontSize:10,color:'#888'}},`${e.source_table} → ${e.target_table}`)
+        )
+      ),
+      h('div',{className:'domain-box',style:{marginBottom:8}},
+        h('div',{style:{display:'flex',alignItems:'center',marginBottom:4}},
+          h('div',{style:{width:10,height:10,background:srcDomain,borderRadius:'50%',marginRight:6}}),
+          h('span',{style:{color:'#4ECDC4',fontSize:11}},'Source: '),
+          h('span',{style:{color:'#fff',fontSize:11,marginLeft:4}},e.source_table),
+        ),
+        h('div',{style:{fontSize:10,color:'#888',marginLeft:16}},'Column: ',h('span',{style:{color:'#FFD700'}},e.source_column))
+      ),
+      h('div',{className:'domain-box'},
+        h('div',{style:{display:'flex',alignItems:'center',marginBottom:4}},
+          h('div',{style:{width:10,height:10,background:tgtDomain,borderRadius:'50%',marginRight:6}}),
+          h('span',{style:{color:'#F87171',fontSize:11}},'Target: '),
+          h('span',{style:{color:'#fff',fontSize:11,marginLeft:4}},e.target_table),
+        ),
+        h('div',{style:{fontSize:10,color:'#888',marginLeft:16}},'Column: ',h('span',{style:{color:'#FFD700'}},e.target_column))
+      )
+    );
+  }
+
+  // Determine what to show
+  let nodeData=null, nodeType=null;
+  if(treeClick){
+    nodeType=treeClick.type;
+    if(nodeType==='table'){
+      const [dname,tname]=(treeClick.value||'').split('.');
+      const ddata=domainHierarchy[dname]||{};
+      nodeData={type:'table',id:treeClick.value,label:tname,domain:dname,
+                color:ddata.color||'#888',
+                ...((ddata.tables||{})[tname]||{})};
+    } else if(nodeType==='domain'){
+      const ddata=domainHierarchy[treeClick.value]||{};
+      nodeData={type:'domain',id:`domain_${treeClick.value}`,
+                label:(treeClick.value||'').toUpperCase(),
+                color:ddata.color||'#888',...ddata};
+    } else if(nodeType==='attribute'){
+      const parts=(treeClick.value||'').split('.');
+      const dname=parts[0],tname=parts[1],aname=parts.slice(2).join('.');
+      const ddata=domainHierarchy[dname]||{};
+      const tdata=(ddata.tables||{})[tname]||{};
+      const ainfo=(tdata.attributes||[]).find(a=>a.name===aname)||{};
+      nodeData={type:'attribute',id:treeClick.value,label:aname,
+                domain:dname,table:tname,color:ddata.color||'#4ECDC4',...ainfo};
+    }
+  } else if(selectedNode){
+    nodeType=selectedNode.type;
+    nodeData=selectedNode;
+    if(nodeType==='table'){
+      const [dname,tname]=(selectedNode.id||'').split('.');
+      const ddata=domainHierarchy[dname]||{};
+      const tdata=(ddata.tables||{})[tname]||{};
+      nodeData={...selectedNode,...tdata,domain:dname,label:tname,color:selectedNode.color||ddata.color||'#888'};
+    } else if(nodeType==='domain'){
+      const dname=(selectedNode.id||'').replace('domain_','');
+      const ddata=domainHierarchy[dname]||{};
+      nodeData={...selectedNode,...ddata,color:selectedNode.color||ddata.color||'#888'};
+    }
+  }
+
+  if(!nodeData) return h('div',{style:{padding:'15px'}},
+    h('h3',{className:'section-header',style:{borderBottom:'1px solid #444',paddingBottom:10,marginBottom:15}},'📌 Details'),
+    h('p',{style:{color:'#888',fontSize:12,fontStyle:'italic'}},'Click a node or edge to see details'),
+  );
+
+  // Domain panel
+  if(nodeData.type==='domain'){
+    const dname=(nodeData.id||'').replace('domain_','')|| nodeData.label||'';
+    const dstats=domainStats[dname]||{};
+    const subs=nodeData.subdomains||{};
+    const viewKey=filterState?`domain:${(filterState.value||'')}`:null;
+    const curSizes=(domainSizes||{});
+    const curDomSizes=curSizes[viewKey||'main']||{};
+    const domId=nodeData.id||`domain_${dname}`;
+    const curW=(curDomSizes[domId]||{}).width||DEFAULT_W;
+    const curH=(curDomSizes[domId]||{}).height||DEFAULT_H;
+    const setSize=(w,h)=>{
+      const vk=viewKey||'main';
+      setDomainSizes(prev=>{
+        const vkSizes={...(prev[vk]||{})};
+        vkSizes[domId]={width:w,height:h};
+        return{...prev,[vk]:vkSizes};
+      });
+    };
+    return h('div',{style:{padding:'15px',overflowY:'auto',height:'100%',display:'flex',flexDirection:'column'}},
+      h('div',{style:{display:'flex',alignItems:'center',marginBottom:15}},
+        h('div',{style:{width:20,height:20,background:nodeData.color,borderRadius:4,marginRight:10}}),
+        h('span',{style:{fontSize:16,fontWeight:'bold',color:'#fff'}},(dname||'').toUpperCase())
+      ),
+      h('div',{className:'domain-box',style:{marginBottom:10}},
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+          h('span',{style:{color:'#4ECDC4',fontSize:11,marginRight:15}},'📊 '+(dstats.table_count||0)+' data products'),
+          h('span',{style:{color:'#FFEAA7',fontSize:11}},'📋 '+(dstats.attr_count||0)+' attrs'),
+          h('br',{}),
+          h('span',{style:{color:'#FF6B6B',fontSize:11,marginRight:15}},'🔗 '+(dstats.fk_count||0)+' FKs'),
+          h('span',{style:{color:'#BB8FCE',fontSize:11}},'🏷️ '+(dstats.tag_count||0)+' tags'),
+        )
+      ),
+      nodeData.description&&h('div',{style:{background:'rgba(0,0,0,0.2)',borderRadius:6,padding:10,marginBottom:10}},
+        h('p',{style:{color:'#ccc',fontSize:11,lineHeight:1.6,margin:0}},nodeData.description)
+      ),
+      Object.keys(subs).length>0&&h('div',{},
+        h('div',{className:'section-header'},'Subdomains'),
+        ...Object.keys(subs).sort().map(sdname=>{
+          const sd=subs[sdname];
+          return h('div',{key:sdname,style:{padding:10,background:'rgba(0,0,0,0.3)',borderRadius:6,
+                                            borderLeft:`3px solid ${nodeData.color}`,marginBottom:8}},
+            h('div',{style:{display:'flex',alignItems:'center',marginBottom:4}},
+              h('span',{style:{fontSize:10,color:nodeData.color,marginRight:6}},'◆'),
+              h('span',{style:{fontSize:12,fontWeight:600,color:'#fff',flex:1}},sdname.replace(/_/g,' ').replace(/-/g,' ')),
+              h('span',{style:{fontSize:10,color:'#fff',background:nodeData.color,borderRadius:10,padding:'1px 7px',fontWeight:'bold'}},''+sd.tables.length)
+            ),
+            h('div',{style:{fontSize:10,color:'#888',marginBottom:4}},'📋 '+sd.attr_count+' attrs  🔗 '+sd.fk_count+' FKs'),
+            h('div',{style:{display:'flex',flexWrap:'wrap'}},
+              sd.tables.map(t=>h('span',{key:t,style:{
+                display:'inline-block',padding:'2px 7px',background:'rgba(78,205,196,0.15)',
+                color:'#4ECDC4',borderRadius:3,fontSize:9,marginRight:4,marginBottom:4,
+                border:'1px solid rgba(78,205,196,0.25)'
+              }},t))
+            )
+          );
+        })
+      )
+    );
+  }
+
+  // Subdomain panel
+  if(nodeData.type==='subdomain'){
+    const sdId=nodeData.id||'';
+    const parts=sdId.split('_');
+    const parentDomain=parts[1]||'';
+    const sdKey=parts.slice(2).join('_');
+    const ddata=domainHierarchy[parentDomain]||{};
+    const sdInfo=(ddata.subdomains||{})[sdKey]||{};
+    return h('div',{style:{padding:'15px',overflowY:'auto',height:'100%'}},
+      h('div',{style:{display:'flex',alignItems:'center',marginBottom:15}},
+        h('span',{style:{fontSize:14,color:nodeData.color,marginRight:10}},'◆'),
+        h('div',{},
+          h('span',{style:{fontSize:16,fontWeight:'bold',color:'#fff',display:'block'}},(nodeData.label||'').replace(/_/g,' ')),
+          h('span',{style:{fontSize:10,color:nodeData.color}},'Subdomain of '+parentDomain.replace(/_/g,' '))
+        )
+      ),
+      h('div',{className:'domain-box',style:{marginBottom:12}},
+        h('span',{style:{color:'#4ECDC4',fontSize:11,marginRight:15}},'📊 '+(sdInfo.tables||[]).length+' data products'),
+        h('span',{style:{color:'#FFEAA7',fontSize:11,marginRight:15}},'📋 '+(sdInfo.attr_count||0)+' attrs'),
+        h('span',{style:{color:'#FF6B6B',fontSize:11}},'🔗 '+(sdInfo.fk_count||0)+' FKs'),
+      ),
+      h('div',{className:'section-header'},'Data Products'),
+      h('div',{style:{display:'flex',flexWrap:'wrap'}},
+        (sdInfo.tables||[]).map(t=>h('span',{key:t,style:{
+          display:'inline-block',padding:'4px 10px',background:'rgba(78,205,196,0.15)',
+          color:'#4ECDC4',borderRadius:4,fontSize:11,marginRight:5,marginBottom:5,
+          border:'1px solid rgba(78,205,196,0.25)'
+        }},t))
+      )
+    );
+  }
+
+  // Table panel
+  if(nodeData.type==='table'){
+    const tname=nodeData.label||(nodeData.id||'').split('.').pop()||'';
+    const dname=nodeData.domain||'';
+    const attrs=nodeData.attributes||[];
+    const tags=Array.isArray(nodeData.tags)?nodeData.tags:nodeData.tags?[nodeData.tags]:[];
+    const pkAttrs=attrs.filter(a=>a.pk);
+    const fkAttrs=attrs.filter(a=>a.fk&&!a.pk);
+    const otherAttrs=attrs.filter(a=>!a.pk&&!a.fk);
+    const sortedAttrs=[...pkAttrs,...fkAttrs,...otherAttrs];
+    return h('div',{style:{padding:'15px',display:'flex',flexDirection:'column',height:'100%'}},
+      h('div',{style:{display:'flex',alignItems:'center',marginBottom:10}},
+        h('div',{style:{width:20,height:20,background:nodeData.color,borderRadius:'50%',marginRight:10,border:'2px solid white'}}),
+        h('div',{},
+          h('span',{style:{fontSize:16,fontWeight:'bold',color:'#fff',display:'block'}},tname),
+          h('span',{style:{fontSize:10,color:nodeData.color}},dname.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())),
+          nodeData.subdomain&&h('span',{style:{fontSize:10,color:'#aaa'}},' › '+nodeData.subdomain.replace(/_/g,' '))
+        )
+      ),
+      h('div',{className:'domain-box',style:{marginBottom:10}},
+        h('span',{style:{color:'#4ECDC4',fontSize:11,marginRight:15}},'📊 '+(nodeData.attribute_count||attrs.length)+' attrs'),
+        h('span',{style:{color:'#FF6B6B',fontSize:11,marginRight:15}},'🔗 '+(nodeData.fk_count||0)+' FKs'),
+        h('span',{style:{color:'#BB8FCE',fontSize:11}},'🏷️ '+tags.length+' tags'),
+      ),
+      nodeData.description&&h('p',{style:{
+        color:'#ccc',fontSize:13,lineHeight:1.6,marginBottom:12,padding:8,
+        background:'rgba(255,255,255,0.03)',borderRadius:4,
+        borderLeft:`3px solid ${nodeData.color}`
+      }},nodeData.description),
+      tags.length>0&&h('div',{style:{marginBottom:10}},
+        tags.map(t=>h('span',{key:t,className:'tag-pill'},t))
+      ),
+      h('div',{className:'section-header'},'Attributes'),
+      h('div',{style:{flex:1,overflowY:'auto',background:'rgba(0,0,0,0.2)',borderRadius:6,padding:8}},
+        sortedAttrs.map(attr=>{
+          const isPk=attr.pk;
+          const isFk=!!attr.fk;
+          const icon=isPk?'🔑 ':isFk?'🔗 ':'• ';
+          const iconColor=isPk?'#FFD700':isFk?'#FF6B6B':'#555';
+          return h('div',{key:attr.name,className:'attr-row'},
+            h('div',{style:{display:'flex',alignItems:'center'}},
+              h('span',{style:{color:iconColor,fontSize:11,marginRight:4,width:18}},icon),
+              h('span',{style:{color:'#fff',fontSize:13,fontWeight:'bold',flex:1}},attr.name),
+              h('span',{style:{color:'#4ECDC4',fontSize:10,marginLeft:8}},attr.type)
+            ),
+            (isFk||attr.desc)&&h('div',{style:{marginLeft:22,marginTop:2}},
+              isFk&&h('span',{style:{color:'#FF6B6B',fontSize:10}},'→ '+attr.fk),
+              attr.desc&&h('p',{style:{color:'#888',fontSize:10,margin:'2px 0 0 0',lineHeight:1.4}},
+                attr.desc.length>100?attr.desc.slice(0,100)+'...':attr.desc)
+            )
+          );
+        })
+      )
+    );
+  }
+
+  // Attribute panel
+  if(nodeData.type==='attribute'){
+    const color=nodeData.pk?'#FFD700':nodeData.fk?'#FF6B6B':(domainColors[nodeData.domain]||'#4ECDC4');
+    return h('div',{style:{padding:'15px',overflowY:'auto',height:'100%'}},
+      h('div',{style:{display:'flex',alignItems:'center',marginBottom:10}},
+        h('span',{style:{fontSize:16,color,marginRight:10}},'📊'),
+        h('div',{},
+          h('span',{style:{fontSize:16,fontWeight:'bold',color:'#fff',display:'block'}},nodeData.label||nodeData.name||''),
+          h('span',{style:{fontSize:10,color:'#888'}},nodeData.domain+'.'+nodeData.table)
+        )
+      ),
+      h('div',{className:'domain-box',style:{marginBottom:10}},
+        h('div',{},'Type: ',h('span',{style:{color:'#4ECDC4',fontSize:12}},nodeData.type||'Unknown')),
+        nodeData.pk&&h('div',{style:{color:'#FFD700',fontSize:11,marginTop:4}},'🔑 Primary Key'),
+        nodeData.fk&&h('div',{style:{color:'#FF6B6B',fontSize:11,marginTop:4}},'🔗 FK → '+nodeData.fk)
+      ),
+      nodeData.desc&&h('p',{style:{color:'#ccc',fontSize:12,lineHeight:1.6}},nodeData.desc)
+    );
+  }
+  return null;
+}
+
+// ── GitHub repo browser ───────────────────────────────────
+const REPO_LS_KEY='model_viewer:last_repo';
+const CACHE_PREFIX='model_viewer:cache:';
+const MODEL_DIR_RE=/^(ecm|mvm)(_v?\d+)?$/i;
+// Default repo shown in the From Repo dialog when no saved repo exists.
+// Change this single constant if you fork this viewer for a different project.
+const DEFAULT_REPO='databricks-industry-solutions/lakehouse-industry-data-models';
+const DEFAULT_BRANCH='main';
+
+function parseRepoSpec(raw){
+  if(!raw)return null;
+  let s=String(raw).trim().replace(/\.git$/,'').replace(/\/+$/,'');
+  let m=s.match(/^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+?)(?:\/tree\/([^\/\s]+)(?:\/(.*))?)?$/i);
+  if(m)return {owner:m[1],repo:m[2],branch:m[3]||null,path:m[4]||''};
+  m=s.match(/^git@github\.com:([^\/\s]+)\/(.+)$/i);
+  if(m)return {owner:m[1],repo:m[2].replace(/\/+$/,''),branch:null,path:''};
+  m=s.match(/^([^\/\s]+)\/([^\/\s]+)$/);
+  if(m)return {owner:m[1],repo:m[2],branch:null,path:''};
+  return null;
+}
+
+async function ghFetch(url,token,accept){
+  const headers={'Accept':accept||'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  if(token)headers['Authorization']='Bearer '+token;
+  const r=await fetch(url,{headers});
+  if(!r.ok){
+    let body='';try{body=await r.text();}catch(_){}
+    let msg=`GitHub API ${r.status}`;
+    try{const j=JSON.parse(body);if(j&&j.message)msg+=`: ${j.message}`;}catch(_){msg+=': '+body.slice(0,200);}
+    if(r.status===404)msg+=' (repo/branch/path not found, or token lacks access to a private repo)';
+    if(r.status===401||r.status===403)msg+=' (auth or rate-limit; supply a token with repo scope)';
+    const e=new Error(msg);e.status=r.status;throw e;
+  }
+  return r;
+}
+async function ghJson(url,token){return (await ghFetch(url,token)).json();}
+
+async function fetchDefaultBranch(owner,repo,token){
+  const info=await ghJson(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,token);
+  return info.default_branch||'main';
+}
+
+async function fetchRepoTree(owner,repo,branch,token){
+  // Resolve branch -> commit SHA -> tree SHA -> recursive tree
+  const ref=await ghJson(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/ref/heads/${encodeURIComponent(branch)}`,token);
+  const commitSha=ref&&ref.object&&ref.object.sha;
+  if(!commitSha)throw new Error(`Branch '${branch}' not found`);
+  const commit=await ghJson(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/commits/${commitSha}`,token);
+  const treeSha=commit&&commit.tree&&commit.tree.sha;
+  if(!treeSha)throw new Error('Could not resolve tree SHA from commit');
+  return ghJson(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${treeSha}?recursive=1`,token);
+}
+
+async function fetchModelJsonRaw(owner,repo,branch,dirPath,token){
+  const filePath=(dirPath?dirPath.replace(/^\/+|\/+$/g,'')+'/':'')+'model.json';
+  const url=`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${filePath.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(branch)}`;
+  const r=await ghFetch(url,token,'application/vnd.github.raw');
+  return r.text();
+}
+
+function cacheKey(owner,repo,branch,dirPath){return `${CACHE_PREFIX}${owner}/${repo}@${branch}:${dirPath||''}`;}
+function readCachedModel(owner,repo,branch,dirPath){
+  try{
+    const raw=localStorage.getItem(cacheKey(owner,repo,branch,dirPath));
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    return parsed&&typeof parsed.content==='string'?parsed:null;
+  }catch(_){return null;}
+}
+function writeCachedModel(owner,repo,branch,dirPath,content){
+  const k=cacheKey(owner,repo,branch,dirPath);
+  const v=JSON.stringify({ts:Date.now(),content});
+  try{localStorage.setItem(k,v);return;}catch(_){}
+  // Quota: evict oldest 25% of cache entries and retry
+  try{
+    const keys=Object.keys(localStorage).filter(x=>x.startsWith(CACHE_PREFIX));
+    const aged=keys.map(x=>{
+      let ts=0;try{ts=JSON.parse(localStorage.getItem(x)||'{}').ts||0;}catch(_){}
+      return [x,ts];
+    }).sort((a,b)=>a[1]-b[1]);
+    const trim=Math.max(1,Math.floor(aged.length/4));
+    aged.slice(0,trim).forEach(([x])=>localStorage.removeItem(x));
+    localStorage.setItem(k,v);
+  }catch(_){/* give up silently */}
+}
+// Bump when the default repo changes so returning users with a stale saved
+// repo in localStorage are auto-reset to DEFAULT_REPO (the latest published
+// models) instead of silently re-loading a previously-browsed repo.
+const REPO_SCHEMA_VERSION=2;
+function readLastRepo(){try{const raw=localStorage.getItem(REPO_LS_KEY);if(!raw)return null;const p=JSON.parse(raw);return (p&&p._sv===REPO_SCHEMA_VERSION)?p:null;}catch(_){return null;}}
+function writeLastRepo(spec){try{localStorage.setItem(REPO_LS_KEY,JSON.stringify({...spec,_sv:REPO_SCHEMA_VERSION}));}catch(_){}}
+
+// Scan flat git/trees output for every industry model.json blob and group by
+// industry. Supports two on-disk layouts:
+//   NEW: <industry>/v<N>/(ecm|mvm)/model.json  (version dir is parent, scope dir is child)
+//   OLD: <industry>/(ecm|mvm)_v?<N>/model.json (scope+version combined in one dir)
+// Grouping key is the industry directory path, so all versions of one industry
+// share a row and same-named industries under different prefixes stay distinct.
+// Returns sorted rows: [{industry, parentPath, ecm:[{ver,name,path}], mvm:[...]}],
+// versions sorted newest-first per scope.
+function buildIndustryRows(treeEntries){
+  const byKey={};
+  (treeEntries||[]).forEach(e=>{
+    if(!e||e.type!=='blob')return;
+    const p=e.path||'';
+    if(!p.endsWith('/model.json'))return;
+    const parts=p.split('/');
+    if(parts.length<3)return; // need at least <industry>/<scope_dir>/model.json
+    const scopeDir=parts[parts.length-2];
+    let scope,ver,industry,industryPath,name;
+    const sm=scopeDir.match(/^(ecm|mvm)$/i);
+    const vm=parts.length>=4?parts[parts.length-3].match(/^v(\d+)$/i):null;
+    if(sm&&vm){
+      // NEW layout: bare ecm|mvm scope dir under a v<N> version dir.
+      scope=sm[1].toLowerCase();
+      ver=parseInt(vm[1],10);
+      industry=parts[parts.length-4];
+      industryPath=parts.slice(0,-3).join('/');
+      name='v'+ver;
+    }else{
+      // OLD layout: scope and version combined in a single dir.
+      const om=scopeDir.match(/^(ecm|mvm)_v?(\d+)$/i);
+      if(!om)return;
+      scope=om[1].toLowerCase();
+      ver=parseInt(om[2],10);
+      industry=parts[parts.length-3];
+      industryPath=parts.slice(0,-2).join('/');
+      name=scopeDir;
+    }
+    const dirPath=parts.slice(0,-1).join('/');
+    if(!byKey[industryPath]){byKey[industryPath]={industry,parentPath:industryPath,ecm:[],mvm:[]};}
+    byKey[industryPath][scope].push({ver,name,path:dirPath});
+  });
+  return Object.values(byKey).map(r=>({
+    ...r,
+    ecm:r.ecm.sort((a,b)=>b.ver-a.ver),
+    mvm:r.mvm.sort((a,b)=>b.ver-a.ver),
+  })).sort((a,b)=>a.industry.localeCompare(b.industry)||a.parentPath.localeCompare(b.parentPath));
+}
+
+// One industry+scope cell. Enforces "always use the latest version": the newest
+// version (items are pre-sorted newest-first) is the PRIMARY button; older
+// versions stay reachable behind a collapsed "history" toggle so the default
+// action a user can take is always the latest published model.
+function ScopeCell({scope,items,resolved,loadingPath,onSelect,cacheTick}){
+  const [showHistory,setShowHistory]=useState(false);
+  if(!items||!items.length)return h('span',{style:{color:'#555'}},'—');
+  const latest=items[0];
+  const older=items.slice(1);
+  const verBtn=(item,primary)=>{
+    const cached=resolved?!!readCachedModel(resolved.owner,resolved.repo,resolved.branch,item.path):false;
+    const isLoading=loadingPath===item.path;
+    const bg=isLoading?'#666':(scope==='ecm'?'#4ECDC4':'#BB8FCE');
+    return h('button',{key:item.path,onClick:()=>onSelect(item.path),disabled:isLoading,
+      title:`Load ${item.path}/model.json`,
+      style:{padding:primary?'5px 12px':'3px 9px',background:bg,color:'#fff',border:'none',borderRadius:4,
+             fontSize:primary?12:10,fontWeight:primary?700:600,cursor:isLoading?'wait':'pointer',
+             opacity:primary?1:0.7,display:'inline-flex',alignItems:'center',gap:5,marginRight:6,marginBottom:4}},
+      isLoading?'Loading…':(primary?`Load ${item.name} (latest)`:`Load ${item.name}`),
+      cached&&!isLoading&&h('span',{style:{fontSize:9,background:'rgba(0,0,0,0.25)',
+        padding:'1px 5px',borderRadius:6}},'✓'));
+  };
+  return h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center'}},
+    verBtn(latest,true),
+    older.length>0&&h('button',{key:'__hist',onClick:()=>setShowHistory(v=>!v),
+      title:`${older.length} older version${older.length>1?'s':''}`,
+      style:{padding:'3px 8px',background:'transparent',color:'#888',border:'1px solid #444',
+             borderRadius:4,fontSize:10,cursor:'pointer',marginRight:6,marginBottom:4,whiteSpace:'nowrap'}},
+      `history (${older.length}) ${showHistory?'▴':'▾'}`),
+    showHistory&&older.map(it=>verBtn(it,false)));
+}
+
+function IndustryTable({rows,onSelect,loadingPath,resolved,cacheTick}){
+  if(!rows||!rows.length){
+    return h('div',{style:{textAlign:'center',padding:40,color:'#888',fontSize:12}},
+      h('div',{style:{fontSize:32,marginBottom:10}},'🤷'),
+      'No industry models found. Looking for ',
+      h('code',{style:{color:'#4ECDC4'}},'<industry>/v*/ecm/model.json'),' or ',
+      h('code',{style:{color:'#4ECDC4'}},'<industry>/v*/mvm/model.json'),' (or legacy ',
+      h('code',{style:{color:'#4ECDC4'}},'<industry>/(ecm|mvm)_v*/model.json'),') anywhere in the repo.');
+  }
+  const thStyle={textAlign:'left',padding:'10px 14px',fontSize:11,color:'#888',
+                 textTransform:'uppercase',letterSpacing:0.5,borderBottom:'1px solid #333',
+                 background:'#0f0f1a',position:'sticky',top:0,zIndex:1};
+  const tdStyle={padding:'12px 14px',borderBottom:'1px solid #222',verticalAlign:'middle'};
+  return h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:13}},
+    h('thead',{},h('tr',{},
+      h('th',{style:thStyle},'Industry'),
+      h('th',{style:thStyle},'Load ECM'),
+      h('th',{style:thStyle},'Load MVM'))),
+    h('tbody',{},rows.map(row=>h('tr',{key:row.parentPath},
+      h('td',{style:{...tdStyle,color:'#fff',fontWeight:600}}, row.industry,
+        row.parentPath!==row.industry&&h('div',{style:{color:'#666',fontSize:10,fontWeight:400,marginTop:2}},row.parentPath)),
+      h('td',{style:tdStyle}, h(ScopeCell,{scope:'ecm',items:row.ecm,resolved,loadingPath,onSelect,cacheTick})),
+      h('td',{style:tdStyle}, h(ScopeCell,{scope:'mvm',items:row.mvm,resolved,loadingPath,onSelect,cacheTick})))))
+  );
+}
+
+function RepoBrowser({onLoadModel,onClose}){
+  // Resolution order for the initial repo / branch:
+  //   1. last_repo from localStorage (user's most recent pick)
+  //   2. DEFAULT_REPO / DEFAULT_BRANCH constants (this viewer's baseline)
+  const last=useMemo(()=>readLastRepo()||{},[]);
+  const initialRepo=(last.owner&&last.repo)
+    ? `https://github.com/${last.owner}/${last.repo}`
+    : (DEFAULT_REPO?`https://github.com/${DEFAULT_REPO}`:'');
+  const initialBranch=last.branch||(DEFAULT_REPO?DEFAULT_BRANCH:'');
+  const [repoInput,setRepoInput]=useState(initialRepo);
+  const [branchInput,setBranchInput]=useState(initialBranch);
+  const [tokenInput,setTokenInput]=useState(last.token||'');
+  const [showToken,setShowToken]=useState(false);
+  const [rows,setRows]=useState(null);
+  const [resolved,setResolved]=useState(null);
+  const [truncated,setTruncated]=useState(false);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const [loadingPath,setLoadingPath]=useState(null);
+  const [cacheTick,setCacheTick]=useState(0); // bump to force re-render after cache writes
+
+  const browseRepo=useCallback(async(overrideRepo)=>{
+    setError(null);setRows(null);setLoading(true);setTruncated(false);setResolved(null);
+    try{
+      const raw=(typeof overrideRepo==='string')?overrideRepo:repoInput;
+      const spec=parseRepoSpec(raw);
+      if(!spec)throw new Error('Could not parse repo. Use https://github.com/owner/repo, owner/repo, or git@github.com:owner/repo');
+      // A branch embedded in a pasted /tree/<branch> URL is the most explicit signal,
+      // so honour it over a stale value left in the Branch box, and reflect it back.
+      let branch=(spec.branch||'').trim()||(branchInput||'').trim();
+      if(spec.branch&&spec.branch!==branchInput){setBranchInput(spec.branch);}
+      if(!branch){branch=await fetchDefaultBranch(spec.owner,spec.repo,tokenInput||null);}
+      const treeData=await fetchRepoTree(spec.owner,spec.repo,branch,tokenInput||null);
+      const built=buildIndustryRows(treeData.tree||[]);
+      setRows(built);
+      setResolved({owner:spec.owner,repo:spec.repo,branch});
+      setTruncated(!!treeData.truncated);
+      writeLastRepo({owner:spec.owner,repo:spec.repo,branch,token:tokenInput||''});
+    }catch(e){setError(e.message||String(e));}
+    finally{setLoading(false);}
+  },[repoInput,branchInput,tokenInput]);
+
+  // Auto-load on first open if we have either a saved repo OR a default.
+  const autoRanRef=useRef(false);
+  useEffect(()=>{
+    if(autoRanRef.current)return;
+    autoRanRef.current=true;
+    if((last.owner&&last.repo)||DEFAULT_REPO){browseRepo();}
+  },[]); // eslint-disable-line
+
+  // Reset back to this viewer's default repo. Clears any stale saved repo in
+  // localStorage (a common reason a previously-browsed repo hides newly
+  // published versions) and re-browses the default so the latest is shown.
+  const resetToDefault=useCallback(()=>{
+    try{localStorage.removeItem(REPO_LS_KEY);}catch(_){}
+    const durl=DEFAULT_REPO?`https://github.com/${DEFAULT_REPO}`:'';
+    setRepoInput(durl);setBranchInput(DEFAULT_REPO?DEFAULT_BRANCH:'');setTokenInput('');
+    if(durl)browseRepo(durl);
+  },[browseRepo]);
+
+  const handleSelect=useCallback(async(dirPath)=>{
+    if(!resolved)return;
+    setLoadingPath(dirPath);setError(null);
+    try{
+      const cached=readCachedModel(resolved.owner,resolved.repo,resolved.branch,dirPath);
+      let content,fromCache=false;
+      if(cached){content=cached.content;fromCache=true;}
+      else{
+        content=await fetchModelJsonRaw(resolved.owner,resolved.repo,resolved.branch,dirPath,tokenInput||null);
+        writeCachedModel(resolved.owner,resolved.repo,resolved.branch,dirPath,content);
+      }
+      const data=JSON.parse(content);
+      const label=`${resolved.owner}/${resolved.repo}@${resolved.branch}/${dirPath}/model.json${fromCache?' (cached)':''}`;
+      onLoadModel(data,label);
+      onClose();
+    }catch(e){setError((e&&e.message)||String(e));}
+    finally{setLoadingPath(null);setCacheTick(t=>t+1);}
+  },[resolved,tokenInput,onLoadModel,onClose]);
+
+  const clearCache=useCallback(()=>{
+    if(!resolved){
+      Object.keys(localStorage).filter(k=>k.startsWith(CACHE_PREFIX)).forEach(k=>localStorage.removeItem(k));
+    }else{
+      const pref=`${CACHE_PREFIX}${resolved.owner}/${resolved.repo}@${resolved.branch}:`;
+      Object.keys(localStorage).filter(k=>k.startsWith(pref)).forEach(k=>localStorage.removeItem(k));
+    }
+    setCacheTick(t=>t+1);
+  },[resolved]);
+
+  const inputStyle={background:'#0f0f1a',color:'#fff',border:'1px solid #444',borderRadius:4,padding:'8px 10px',fontSize:12,outline:'none',width:'100%'};
+  const labelStyle={display:'block',color:'#888',fontSize:10,marginBottom:4,letterSpacing:0.5,textTransform:'uppercase'};
+
+  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',
+                          display:'flex',alignItems:'center',justifyContent:'center',zIndex:5000},
+                  onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+    h('div',{style:{width:'min(720px, 92vw)',height:'min(720px, 88vh)',background:'#1a1a2e',
+                    borderRadius:10,border:'1px solid #333',boxShadow:'0 20px 60px rgba(0,0,0,0.5)',
+                    display:'flex',flexDirection:'column',overflow:'hidden'}},
+      // Header
+      h('div',{style:{padding:'14px 18px',borderBottom:'1px solid #333',
+                       display:'flex',alignItems:'center',gap:10,flexShrink:0}},
+        h('span',{style:{fontSize:18}},'📁'),
+        h('h2',{style:{margin:0,fontSize:15,fontWeight:600,flex:1,color:'#fff'}},'Load model.json from GitHub repo'),
+        h('button',{onClick:onClose,style:{background:'transparent',color:'#888',border:'none',
+          fontSize:20,cursor:'pointer',padding:'0 6px',lineHeight:1}},'×')
+      ),
+      // Form
+      h('div',{style:{padding:'14px 18px',borderBottom:'1px solid #2a2a3e',flexShrink:0}},
+        h('div',{style:{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10,marginBottom:8}},
+          h('div',{},
+            h('label',{style:labelStyle},'Repository'),
+            h('input',{type:'text',value:repoInput,onChange:e=>{const v=e.target.value;setRepoInput(v);const sp=parseRepoSpec(v);if(sp&&sp.branch)setBranchInput(sp.branch);},
+              placeholder:'https://github.com/owner/repo  or  owner/repo',
+              style:inputStyle,
+              onKeyDown:e=>{if(e.key==='Enter')browseRepo();}})
+          ),
+          h('div',{},
+            h('label',{style:labelStyle},'Branch (blank = default)'),
+            h('input',{type:'text',value:branchInput,onChange:e=>setBranchInput(e.target.value),
+              placeholder:'main',style:inputStyle,
+              onKeyDown:e=>{if(e.key==='Enter')browseRepo();}})
+          )
+        ),
+        h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:8}},
+          h('div',{style:{flex:1}},
+            h('label',{style:labelStyle},'GitHub Token (optional, needed for private repos / rate limit)'),
+            h('input',{type:showToken?'text':'password',value:tokenInput,onChange:e=>setTokenInput(e.target.value),
+              placeholder:'ghp_… (stored in your browser localStorage)',style:inputStyle,
+              onKeyDown:e=>{if(e.key==='Enter')browseRepo();}})
+          ),
+          h('div',{style:{display:'flex',flexDirection:'column',gap:4,paddingTop:14}},
+            h('button',{onClick:()=>setShowToken(s=>!s),
+              style:{padding:'6px 10px',background:'#333',color:'#ccc',border:'1px solid #444',
+                     borderRadius:4,fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}},
+              showToken?'Hide':'Show')
+          )
+        ),
+        h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+          h('button',{onClick:()=>browseRepo(),disabled:loading,
+            style:{padding:'8px 16px',background:loading?'#555':'#4ECDC4',color:'#fff',border:'none',
+                   borderRadius:4,fontSize:12,cursor:loading?'wait':'pointer',fontWeight:600}},
+            loading?'Loading…':(rows?'Refresh':'Browse repo')),
+          rows&&h('button',{onClick:clearCache,title:'Clear cached model.json files for this repo',
+            style:{padding:'6px 10px',background:'#333',color:'#ccc',border:'1px solid #444',
+                   borderRadius:4,fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}},
+            'Clear cache'),
+          DEFAULT_REPO&&h('button',{onClick:resetToDefault,disabled:loading,
+            title:`Reset to the default repository (${DEFAULT_REPO}) and show the latest published models`,
+            style:{padding:'6px 10px',background:'#333',color:'#ccc',border:'1px solid #444',
+                   borderRadius:4,fontSize:10,cursor:loading?'wait':'pointer',whiteSpace:'nowrap'}},
+            'Use default repo'),
+          rows&&h('span',{style:{color:'#666',fontSize:10,marginLeft:'auto'}},
+            `${rows.length} ${rows.length===1?'industry':'industries'}`)
+        ),
+        resolved&&h('div',{style:{color:'#666',fontSize:10,marginTop:8}},
+          `Browsing ${resolved.owner}/${resolved.repo} @ ${resolved.branch}`,
+          truncated?h('span',{style:{color:'#FFB347',marginLeft:8}},'(tree truncated by GitHub — use a more specific repo)'):null)
+      ),
+      // Body — industry table
+      h('div',{style:{flex:1,overflowY:'auto',background:'#0f0f1a'}},
+        error&&h('div',{style:{margin:18,padding:12,background:'rgba(255,107,107,0.1)',border:'1px solid #FF6B6B',
+                               borderRadius:6,color:'#FFB347',fontSize:12,wordBreak:'break-word'}},
+          h('strong',{style:{color:'#FF6B6B'}},'Error: '),error),
+        loading&&h('div',{style:{textAlign:'center',padding:30,color:'#888',fontSize:12}},
+          h('div',{className:'spinner',style:{margin:'0 auto 12px'}}),'Loading repository…'),
+        !loading&&rows&&h(IndustryTable,{rows,onSelect:handleSelect,loadingPath,resolved,cacheTick}),
+        !loading&&!rows&&!error&&h('div',{style:{textAlign:'center',padding:40,color:'#666',fontSize:12}},
+          h('div',{style:{fontSize:32,marginBottom:10}},'📊'),
+          'Enter a repo above and click ',h('strong',{},'Browse repo'),' to start.'),
+      ),
+      // Footer hint
+      h('div',{style:{padding:'10px 18px',borderTop:'1px solid #333',fontSize:10,color:'#666',flexShrink:0}},
+        'Each row is one industry. The primary ECM / MVM button always loads the ',
+        h('strong',{style:{color:'#4ECDC4'}},'latest'),' ',
+        h('code',{style:{color:'#4ECDC4'}},'<industry>/v<N>/(ecm|mvm)/model.json'),
+        '; older versions are under “history”. Loaded files are cached in your browser.')
+    )
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────
+function App(){
+  // Graph state
+  const [graphData,setGraphData]=useState(null);
+  const [graphIndexes,setGraphIndexes]=useState(null);
+  const cyRef=useRef(null);
+  const containerRef=useRef(null);
+  // Track last fit-worthy view fingerprint so we skip auto-fit on drag/resize
+  // re-renders (user-driven state changes should preserve user's viewport).
+  const lastFitKeyRef=useRef('');
+
+  // UI state
+  const [layout,setLayout]=useState('circle');
+  const [showDomains,setShowDomains]=useState(true);
+  const [semanticNames,setSemanticNames]=useState(true);
+  const [showDbxFk,setShowDbxFk]=useState(true);
+  const [sizeScale,setSizeScale]=useState(1.0);
+  const [filterState,setFilterState]=useState({type:null,value:null});
+  const [navHistory,setNavHistory]=useState([]);
+  const [domainSizes,setDomainSizes]=useState({});
+  const [selectedNode,setSelectedNode]=useState(null);
+  const [selectedEdge,setSelectedEdge]=useState(null);
+  const [treeClick,setTreeClick]=useState(null);
+  const [expandedDomains,setExpandedDomains]=useState(new Set());
+  const [expandedTables,setExpandedTables]=useState(new Set());
+  const [searchTerm,setSearchTerm]=useState('');
+  const [isLoading,setIsLoading]=useState(false);
+  const [loadError,setLoadError]=useState(null);
+  const [uploadStatus,setUploadStatus]=useState('');
+  const [showRepoDialog,setShowRepoDialog]=useState(false);
+
+  // Databricks browser state
+  // Double-click detection
+  const lastTapRef=useRef({});
+
+  // Process model data
+  const processModel=useCallback((rawModel,label)=>{
+    if(!rawModel){setLoadError('No model data');return;}
+    let model=rawModel;
+    if(model.model&&model.model_requirements) model=model.model;
+    if(!model.domains||!model.domains.length){
+      if(model.data_domains&&model.data_domains.length) model.domains=model.data_domains;
+    }
+    if(!model.domains||!model.domains.length){
+      setLoadError('No domains found in model JSON. Expected: { domains: [...] }');
+      setIsLoading(false);
+      return;
+    }
+    try{
+      const gd=extractGraph(model);
+      const idx=buildIndexes(gd);
+      setGraphData({...gd,sourceLabel:label});
+      setGraphIndexes(idx);
+      setFilterState({type:null,value:null});
+      setNavHistory([]);
+      setLoadError(null);
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setTreeClick(null);
+    }catch(e){
+      setLoadError('Error processing model: '+e.message);
+    }
+    setIsLoading(false);
+  },[]);
+
+  // Handle file upload
+  const handleUpload=useCallback(e=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    setIsLoading(true);setLoadError(null);setUploadStatus('');
+    const sizeMB=(file.size/1048576).toFixed(1);
+    setUploadStatus(`Reading ${sizeMB} MB...`);
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        setUploadStatus('Parsing...');
+        const data=JSON.parse(ev.target.result);
+        // Defer processing so spinner renders
+        setTimeout(()=>{
+          try{
+            processModel(data,file.name);
+            setUploadStatus('✓ '+file.name);
+          }catch(err){
+            setLoadError('Processing error: '+err.message);
+            setIsLoading(false);
+            setUploadStatus('✗ Error');
+          }
+        },50);
+      }catch(err){
+        setLoadError('JSON parse error: '+err.message);
+        setIsLoading(false);
+        setUploadStatus('✗ Parse error');
+      }
+    };
+    reader.onerror=()=>{
+      setLoadError('Failed to read file');
+      setIsLoading(false);
+      setUploadStatus('✗ Read error');
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  },[processModel]);
+
+  // Auto-load a server-bundled model on first mount (if the app ships one at
+  // /model.json). Silently no-ops when absent or when the route returns HTML
+  // (old servers with only a SPA catch-all), so the empty state still shows.
+  const autoLoadedRef=useRef(false);
+  useEffect(()=>{
+    if(autoLoadedRef.current)return;
+    autoLoadedRef.current=true;
+    (async()=>{
+      try{
+        const r=await fetch('./model.json',{headers:{'Accept':'application/json'}});
+        if(!r.ok)return;
+        const ct=r.headers.get('content-type')||'';
+        if(ct.indexOf('json')<0)return;
+        setIsLoading(true);setLoadError(null);setUploadStatus('Loading bundled model…');
+        const data=await r.json();
+        setTimeout(()=>{
+          try{processModel(data,'bundled/model.json');setUploadStatus('✓ bundled model');}
+          catch(err){setLoadError('Processing error: '+err.message);setIsLoading(false);setUploadStatus('✗ Error');}
+        },50);
+      }catch(_){/* no bundled model; keep empty state */}
+    })();
+  },[processModel]);
+
+  // ── Cytoscape mount/destroy ─────────────────────────────
+  useEffect(()=>{
+    if(!containerRef.current)return;
+    const cy=cytoscape({
+      container:containerRef.current,
+      elements:[],
+      style:getStylesheet(true),
+      layout:{name:'circle'},
+      minZoom:0.01,maxZoom:5,wheelSensitivity:0.3,
+      userPanningEnabled:true,userZoomingEnabled:true,
+      boxSelectionEnabled:false,
+    });
+    cyRef.current=cy;
+
+    // Node click
+    cy.on('tap','node',e=>{
+      const data=e.target.data();
+      const now=Date.now();
+      const last=lastTapRef.current;
+      const isDouble=last.id===data.id&&(now-last.time)<500;
+      lastTapRef.current={id:data.id,time:now};
+      if(isDouble){
+        // Double-click → navigate into node
+        if(data.type==='table'){
+          navigate({type:'table',value:data.id});
+        } else if(data.type==='domain'){
+          navigate({type:'domain',value:data.id.replace('domain_','')});
+        }
+      } else {
+        // Single-click → select, show details
+        setSelectedNode(data);
+        setSelectedEdge(null);
+        setTreeClick(null);
+        if(data.type==='domain'){
+          navigate({type:'domain',value:data.id.replace('domain_','')});
+        }
+        if(data.type==='table'){
+          navigate({type:'table',value:data.id});
+        }
+      }
+    });
+
+    // Edge click
+    cy.on('tap','edge',e=>{
+      const data=e.target.data();
+      setSelectedEdge(data);
+      setSelectedNode(null);
+      setTreeClick(null);
+    });
+
+    // Background click - deselect
+    cy.on('tap',e=>{
+      if(e.target===cy){
+        setSelectedEdge(null);
+      }
+    });
+
+    return()=>{cy.destroy();cyRef.current=null;};
+  },[]);
+
+  // ── Navigation ─────────────────────────────────────────
+  const navigate=useCallback((newFilter)=>{
+    setFilterState(prev=>{
+      if(prev.type) setNavHistory(h=>[...h,prev]);
+      return newFilter;
+    });
+  },[]);
+
+  const goBack=useCallback(()=>{
+    setNavHistory(h=>{
+      if(!h.length){setFilterState({type:null,value:null});return h;}
+      const prev=h[h.length-1];
+      setFilterState(prev);
+      return h.slice(0,-1);
+    });
+  },[]);
+
+  // ── Graph elements computation ─────────────────────────
+  const graphElements=useMemo(()=>{
+    if(!graphData||!graphIndexes) return [];
+    const {nodes,edges,domainColors,domainHierarchy}=graphData;
+    const {tableById,domainByName,tablesByDomain,edgesBySource,edgesByTarget,edgesWithinDomain}=graphIndexes;
+    const {type,value}=filterState;
+    const viewKey=type?`${type}:${typeof value==='object'?JSON.stringify(value):value}`:'main';
+    const curSizes=(domainSizes[viewKey]||{});
+
+    // Apply domain sizes to domain nodes
+    const applyDomainSizes=(els)=>els.map(el=>{
+      if(el.data&&el.data.type==='domain'){
+        const sz=curSizes[el.data.id]||{};
+        return {...el,data:{...el.data,width:sz.width||DEFAULT_W,height:sz.height||DEFAULT_H}};
+      }
+      return el;
+    });
+
+    if(type==='table'&&value){
+      const tid=value;
+      const outEdges=edgesBySource[tid]||[];
+      const inEdges=edgesByTarget[tid]||[];
+      const outIds=new Set(outEdges.map(e=>e.data.target));
+      const inIds=new Set(inEdges.map(e=>e.data.source));
+      const relDomains=new Set();
+      const result=[];
+      const cn=tableById[tid];
+      if(cn){relDomains.add(cn.data.domain);result.push({...cn,classes:'table-node domain-view-node center-node'});}
+      [...outIds,...inIds].filter(id=>id!==tid).forEach(id=>{
+        const n=tableById[id];if(!n)return;
+        relDomains.add(n.data.domain);
+        result.push({...n,classes:outIds.has(id)?'table-node domain-view-node fk-target':'table-node domain-view-node fk-source'});
+      });
+      // Add domain compound parents so every involved table sits inside its domain
+      // box. STRIP the width/height from data so cytoscape auto-sizes the compound
+      // parent to wrap its circular child cluster (like subdomain boxes do in
+      // domain view). Otherwise the box defaults to 500x400 which looks tiny/huge
+      // depending on how many children are inside.
+      [...relDomains].filter(Boolean).forEach(d=>{
+        const n=domainByName[d];
+        if(n){
+          const {width,height,...data}=n.data||{};
+          result.push({...n,data,classes:'domain-node fk-domain'});
+        }
+      });
+      outEdges.forEach(e=>result.push({...e,classes:'fk-edge outgoing-edge'}));
+      inEdges.forEach(e=>result.push({...e,classes:'fk-edge incoming-edge'}));
+      return result;
+    }
+
+    if(type==='edge'&&value){
+      const ed=typeof value==='object'?value:{};
+      const relDomains=new Set();
+      const result=[];
+      const sn=tableById[ed.source];
+      const tn=tableById[ed.target];
+      if(sn){relDomains.add(sn.data.domain);result.push({...sn,classes:'table-node fk-source'});}
+      if(tn){relDomains.add(tn.data.domain);result.push({...tn,classes:'table-node fk-target'});}
+      [...relDomains].filter(Boolean).sort().forEach(d=>{const n=domainByName[d];if(n)result.push(n);});
+      (edgesBySource[ed.source]||[]).filter(e=>e.data.target===ed.target&&e.data.source_column===ed.source_column)
+        .forEach(e=>result.push({...e,classes:'fk-edge outgoing-edge'}));
+      return applyDomainSizes(result);
+    }
+
+    if(type==='domain'&&value){
+      const dname=value;
+      const dh=domainHierarchy[dname]||{};
+      const subs=dh.subdomains||{};
+      const hasSubs=Object.keys(subs).length>0;
+      const domColor=(domainByName[dname]||{data:{}}).data.color||'#888';
+      // Distinct colors for each subdomain within a domain view. Keeps the domain
+      // color palette idea but rotates hues so each subdomain box is visually
+      // differentiated. Industry-agnostic, deterministic per subdomain name.
+      const SUBDOMAIN_PALETTE=['#4ECDC4','#FFB74D','#BB8FCE','#F67280','#45B7D1','#FFE66D','#95E1D3','#F38181','#AED581','#FCB7AF','#84C4E4','#D4A5A5','#9ED9CC','#F7C873','#B39DDB'];
+      const result=[];
+      const subNodeIds=new Set();
+      if(hasSubs){
+        Object.keys(subs).sort().forEach((sdname,sdi)=>{
+          const sdId=`subdomain_${dname}_${sdname}`;
+          subNodeIds.add(sdId);
+          const sdColor=SUBDOMAIN_PALETTE[sdi%SUBDOMAIN_PALETTE.length];
+          const scMap=(subs[sdname]||{}).schemaCount||{};
+          const sdSchema=Object.keys(scMap).sort((a,b)=>scMap[b]-scMap[a])[0]||'';
+          const semLbl=sdname.replace(/_/g,' ').replace(/-/g,' ');
+          result.push({data:{id:sdId,label:semanticNames?semLbl:(sdSchema||semLbl),
+            sem_label:semLbl,orig_label:sdSchema||semLbl,orig_schema:sdSchema,
+            type:'subdomain',color:sdColor,domain:dname,domain_color:domColor},classes:'subdomain-node'});
+        });
+      } else {
+        const dn=domainByName[dname];
+        if(dn)result.push(dn);
+      }
+      const domTables=tablesByDomain[dname]||[];
+      const visibleIds=new Set();
+      domTables.forEach(n=>{
+        const sd=n.data.subdomain||'';
+        const sdId=hasSubs&&sd?`subdomain_${dname}_${sd}`:'';
+        const cloned={...n,classes:'table-node domain-view-node',data:{...n.data}};
+        if(hasSubs&&sd&&subNodeIds.has(sdId)) cloned.data.parent=sdId;
+        else if(hasSubs) delete cloned.data.parent;
+        result.push(cloned);
+        visibleIds.add(n.data.id);
+      });
+      // Render every edge whose BOTH endpoints are visible in this domain view
+      // (co-visible), so two tables the user can see always show their link.
+      // Robust vs. table names containing dots (unlike the prefix-split index).
+      edges.forEach(e=>{
+        if(visibleIds.has(e.data.source)&&visibleIds.has(e.data.target)) result.push(e);
+      });
+      const pos=calcDomainViewPositions(result);
+      result.forEach(n=>{if(n.data&&pos[n.data.id])n.position=pos[n.data.id];});
+      return applyDomainSizes(result);
+    }
+
+    if(type==='attribute'&&value){
+      const parts=value.split('.');
+      if(parts.length<3) return [];
+      const [dname,tname,...rest]=parts;
+      const aname=rest.join('.');
+      const ddata=domainHierarchy[dname]||{};
+      const tdata=(ddata.tables||{})[tname]||{};
+      const attrs=tdata.attributes||[];
+      const ainfo=attrs.find(a=>a.name===aname)||{};
+      const domColor=ddata.color||'#4ECDC4';
+      const aColor=ainfo.pk?'#FFD700':ainfo.fk?'#FF6B6B':domColor;
+      const tid=`${dname}.${tname}`;
+      const attrNode={data:{id:`attr_${value}`,label:aname,type:'attribute',color:aColor,domain:dname,table:tname},
+                      classes:'attribute-node',position:{x:0,y:0}};
+      const result=[attrNode];
+      const tn2=tableById[tid];
+      if(tn2) result.push({...tn2,classes:'table-node center-node',position:{x:-150,y:0}});
+      result.push({data:{id:`attr_edge_${value}`,source:tid,target:`attr_${value}`,label:'has attribute'},classes:'attr-edge'});
+      if(ainfo.fk){
+        const fkParts=ainfo.fk.split('.');
+        if(fkParts.length>=2){
+          const fkId=`${fkParts[0]}.${fkParts[1]}`;
+          const fkN=tableById[fkId];
+          if(fkN){
+            result.push({...fkN,classes:'table-node fk-target',position:{x:150,y:0}});
+            result.push({data:{id:`fk_edge_${value}`,source:`attr_${value}`,target:fkId,label:'references'},classes:'fk-edge outgoing-edge'});
+          }
+        }
+      }
+      return result;
+    }
+
+    // Main view — domain boxes auto-sized by table count, tables inside
+    const allNodes=nodes.map(n=>{
+      if(n.data.type==='domain'){
+        const sz=curSizes[n.data.id]||{};
+        const dname=n.data.id.replace('domain_','');
+        const tblCount=(tablesByDomain[dname]||[]).length;
+        const autoW=Math.max(DEFAULT_W, Math.ceil(Math.sqrt(tblCount))*140);
+        const autoH=Math.max(DEFAULT_H, Math.ceil(Math.sqrt(tblCount))*120);
+        return {...n,data:{...n.data,width:sz.width||autoW,height:sz.height||autoH}};
+      }
+      return n;
+    });
+    return [...allNodes,...edges];
+  },[graphData,graphIndexes,filterState,domainSizes,layout]);
+
+  // ── Push elements to Cytoscape ─────────────────────────
+  useEffect(()=>{
+    const cy=cyRef.current;
+    if(!cy)return;
+    if(!graphData){cy.elements().remove();return;}
+    const {type}=filterState;
+    try{
+    // Filter out edges with missing source/target nodes
+    const nodeIds=new Set(graphElements.filter(e=>!e.data.source).map(e=>e.data.id));
+    const validElements=graphElements.filter(e=>{
+      if(e.data.source&&!nodeIds.has(e.data.source)) return false;
+      if(e.data.target&&!nodeIds.has(e.data.target)) return false;
+      return true;
+    });
+    // Batch update
+    cy.batch(()=>{
+      cy.elements().remove();
+      cy.add(validElements);
+    });
+    // Choose layout strategy
+    if(!type && layout==='clustered'){
+      const pos=calcClusteredPositions(graphData.nodes, 'grid',
+        Object.fromEntries(Object.entries(domainSizes.main||{}).map(([k,v])=>[k,v])));
+      cy.nodes().forEach(n=>{if(pos[n.id()])n.position(pos[n.id()]);});
+    } else if(!type && layout==='circle'){
+      // Circular grouped by domain — tables stay compound children so dragging a box moves them
+      const tblNodes=cy.nodes('.table-node').sort((a,b)=>{
+        const da=(a.data('domain')||''), db=(b.data('domain')||'');
+        return da<db?-1:da>db?1:0;
+      });
+      const cnt=tblNodes.length;
+      if(cnt>0){
+        const r=Math.max(300, cnt*25);
+        tblNodes.forEach((node,i)=>{
+          const angle=(2*Math.PI*i/cnt)-(Math.PI/2);
+          node.position({x:r*Math.cos(angle), y:r*Math.sin(angle)});
+        });
+      }
+    } else if(type==='domain' && layout==='circle'){
+      // Circular grouped by subdomain — compound parents auto-wrap; dragging box moves products
+      const tblNodes=cy.nodes('.domain-view-node').sort((a,b)=>{
+        const pa=(a.data('parent')||''), pb=(b.data('parent')||'');
+        return pa<pb?-1:pa>pb?1:0;
+      });
+      const cnt=tblNodes.length;
+      if(cnt>0){
+        const r=Math.max(300, cnt*30);
+        tblNodes.forEach((node,i)=>{
+          const angle=(2*Math.PI*i/cnt)-(Math.PI/2);
+          node.position({x:r*Math.cos(angle), y:r*Math.sin(angle)});
+        });
+      }
+    } else if(type==='attribute'||type==='edge'||type==='domain'){
+      cy.layout({name:'preset',animate:false,fit:true,padding:60}).run();
+    } else if(type==='table'){
+      // Product focus view: SAME global-circle layout as main view. Related
+      // tables sorted by domain on ONE big ring, center (focused) table at
+      // origin. Compound domain boxes auto-wrap each domain's contiguous arc.
+      // Large radius + domain sort minimises cross-domain box overlap.
+      const centerNode=cy.nodes('.center-node');
+      if(centerNode.length) centerNode.position({x:0,y:0});
+      const ringNodes=cy.nodes('.domain-view-node').difference(centerNode).sort((a,b)=>{
+        const da=(a.data('domain')||''), db=(b.data('domain')||'');
+        if(da!==db) return da<db?-1:1;
+        const la=(a.data('label')||''), lb=(b.data('label')||'');
+        return la<lb?-1:la>lb?1:0;
+      });
+      const cnt=ringNodes.length;
+      if(cnt>0){
+        // Arc-length-based radius: keep ~75px arc between neighbours so nodes
+        // never touch, but DO NOT inflate radius with count linearly (which
+        // makes fit-to-viewport zoom out and shrink everything on screen).
+        // r = arc_chord / (2*sin(pi/n)) guarantees non-overlapping nodes.
+        const arc=75;
+        const r=cnt<=1?200:Math.max(420, arc/(2*Math.sin(Math.PI/cnt)));
+        ringNodes.forEach((node,i)=>{
+          const angle=(2*Math.PI*i/cnt)-(Math.PI/2);
+          node.position({x:r*Math.cos(angle), y:r*Math.sin(angle)});
+        });
+      }
+    } else {
+      // Other layouts (cose, concentric, grid) or domain sub-views
+      const layoutCfg={...(LAYOUT_CONFIGS[layout]||LAYOUT_CONFIGS.circle)};
+      cy.layout(layoutCfg).run();
+    }
+    // Fit to screen — ONLY on first render of a new view (filter/layout change).
+    // Skip auto-fit when user drags/resizes boxes (which triggers re-render via
+    // domainSizes state update but user wants their viewport preserved).
+    // Always auto-fit after any re-render (initial load, drag, resize, view
+    // change). fit() only adjusts zoom + viewport — it preserves the node
+    // positions chosen by the user (drags stick).
+    const doFit=()=>{
+      cy.fit(60);
+      if(cy.zoom()>1.8) cy.zoom(1.8);
+      cy.center();
+    };
+    setTimeout(doFit,200);
+    setTimeout(doFit,1000);
+    setTimeout(doFit,3000);
+    }catch(e){console.error('Cytoscape layout error:',e);}
+  },[graphElements,layout,filterState,graphData,domainSizes]);
+
+  // ── Update stylesheet when showDomains or sizeScale changes ─────
+  useEffect(()=>{
+    const cy=cyRef.current;
+    if(!cy)return;
+    cy.style(getStylesheet(showDomains,sizeScale));
+    setTimeout(()=>cy.fit(50),50);
+  },[showDomains,sizeScale]);
+
+  // ── Semantic toggle: swap product node labels between the business (semantic)
+  //    name and the original physical table name. Data carries both, so this is
+  //    a pure re-label (no graph rebuild). ───────────────────────────────────
+  useEffect(()=>{
+    const cy=cyRef.current;
+    if(!cy)return;
+    cy.batch(()=>{
+      cy.nodes('.table-node, .domain-node, .subdomain-node').forEach(n=>{
+        const sem=n.data('sem_label'), orig=n.data('orig_label');
+        if(sem||orig) n.data('label', semanticNames ? (sem||orig) : (orig||sem));
+      });
+    });
+  },[semanticNames,graphElements]);
+
+  // ── dbx_fk toggle: hide/show agent-synthesised FK edges (those carrying a
+  //    `_dbx_fk_*` tag). Declared UC FKs are unaffected. Pure display toggle. ──
+  useEffect(()=>{
+    const cy=cyRef.current;
+    if(!cy)return;
+    cy.batch(()=>{
+      cy.edges('.dbx-fk-edge').forEach(e=>{
+        e.style('display', showDbxFk ? 'element' : 'none');
+      });
+    });
+  },[showDbxFk,graphElements]);
+
+  // ── Stats ──────────────────────────────────────────────
+  const statsText=useMemo(()=>{
+    if(!graphData)return '';
+    const {modelName,modelVersion,domainColors,nodes,edges,totalAttrs,totalTags,sourceLabel}=graphData;
+    const domCount=Object.keys(domainColors).length;
+    const tblCount=nodes.filter(n=>n.classes==='table-node').length;
+    const {type,value}=filterState;
+    if(type==='table'&&value){
+      const tname=(value||'').split('.').pop();
+      return `${modelName} • FK: ${tname}`;
+    }
+    if(type==='domain'&&value) return `Domain: ${value}`;
+    if(type==='edge') return `${modelName} • Link View`;
+    if(type==='attribute'&&value) return `${modelName} • Attr: ${(value||'').split('.').pop()}`;
+    return `${domCount} domains, ${tblCount} products, ${totalAttrs} attributes`;
+  },[graphData,filterState]);
+
+  const filterInfoText=useMemo(()=>{
+    if(!graphData||!filterState.type) return '';
+    const {type,value}=filterState;
+    const {edgesBySource,edgesByTarget}=graphIndexes||{};
+    if(type==='table'&&value){
+      return `📊 ${value}`;
+    }
+    if(type==='domain'&&value) return `Domain: ${value}`;
+    if(type==='edge'&&typeof value==='object') return `🔗 ${(value.source||'').split('.').pop()}.${value.source_column||''} → ${(value.target||'').split('.').pop()}.${value.target_column||''}`;
+    if(type==='attribute'&&value) return `📊 ${(value||'').split('.').slice(1).join('.')}`;
+    return '';
+  },[graphData,graphIndexes,filterState]);
+
+  const modelBadge=useMemo(()=>{
+    if(!graphData||filterState.type) return '';
+    const {modelName,modelVersion}=graphData;
+    return modelVersion?`${modelName} ${modelVersion}`:modelName;
+  },[graphData,filterState]);
+
+  // Tree interaction
+  const handleToggleDomain=useCallback(dname=>{
+    setExpandedDomains(s=>{const ns=new Set(s);ns.has(dname)?ns.delete(dname):ns.add(dname);return ns;});
+  },[]);
+  const handleToggleTable=useCallback(fid=>{
+    setExpandedTables(s=>{const ns=new Set(s);ns.has(fid)?ns.delete(fid):ns.add(fid);return ns;});
+  },[]);
+  const handleClickDomain=useCallback(dname=>{
+    setTreeClick({type:'domain',value:dname});
+    setSelectedNode(null);setSelectedEdge(null);
+    navigate({type:'domain',value:dname});
+  },[navigate]);
+  const handleClickTable=useCallback(fid=>{
+    setTreeClick({type:'table',value:fid});
+    setSelectedNode(null);setSelectedEdge(null);
+    navigate({type:'table',value:fid});
+  },[navigate]);
+  const handleClickAttr=useCallback(aid=>{
+    setTreeClick({type:'attribute',value:aid});
+    setSelectedNode(null);setSelectedEdge(null);
+    navigate({type:'attribute',value:aid});
+  },[navigate]);
+
+  const sortedDomains=useMemo(()=>{
+    if(!graphData) return [];
+    return Object.entries(graphData.domainHierarchy||{}).sort((a,b)=>a[0].localeCompare(b[0]));
+  },[graphData]);
+
+  const btnStyle={padding:'8px 12px',background:'#444',color:'#fff',border:'none',borderRadius:4,cursor:'pointer',fontSize:12,marginRight:6};
+
+  return h('div',{style:{display:'flex',flexDirection:'column',height:'100vh',background:'#0f0f1a',color:'#fff',overflow:'hidden'}},
+
+    // ── Top toolbar ──────────────────────────────────────
+    h('div',{style:{display:'flex',alignItems:'center',
+                    padding:'8px 16px',background:'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',
+                    borderBottom:'1px solid #333',flexShrink:0,gap:10,flexWrap:'wrap'}},
+      // Title
+      h('div',{style:{display:'flex',alignItems:'center',gap:8,marginRight:4}},
+        h('h1',{style:{margin:0,fontSize:18,fontWeight:600,color:'#fff',whiteSpace:'nowrap'}},'Model Viewer')
+      ),
+      // Model summary stats
+      graphData&&h('div',{style:{display:'flex',alignItems:'center',gap:12,marginLeft:4}},
+        h('div',{style:{width:1,height:28,background:'#444',flexShrink:0}}),
+        h('span',{style:{color:'#4ECDC4',fontSize:11,whiteSpace:'nowrap'}},
+          Object.keys(graphData.domainColors||{}).length+' Domains'),
+        h('span',{style:{color:'#FFEAA7',fontSize:11,whiteSpace:'nowrap'}},
+          graphData.nodes.filter(n=>n.classes==='table-node').length+' Products'),
+        h('span',{style:{color:'#BB8FCE',fontSize:11,whiteSpace:'nowrap'}},
+          (graphData.totalAttrs||0)+' Attributes'),
+        h('span',{style:{color:'#FF6B6B',fontSize:11,whiteSpace:'nowrap'}},
+          graphData.edges.length+' FKs')
+      ),
+      // Right controls
+      h('div',{style:{display:'flex',alignItems:'center',gap:4,marginLeft:'auto',flexWrap:'wrap'}},
+        h('label',{style:{...btnStyle,background:'#4ECDC4',cursor:'pointer',display:'inline-block',margin:0,padding:'6px 10px',borderRadius:4,fontSize:11}},
+          'Upload JSON',
+          h('input',{type:'file',accept:'.json',style:{display:'none'},onChange:handleUpload})
+        ),
+        h('button',{onClick:()=>setShowRepoDialog(true),
+          style:{...btnStyle,background:'#BB8FCE',padding:'6px 10px',fontSize:11}},
+          'From Repo'),
+        uploadStatus&&h('span',{style:{color:'#4ECDC4',fontSize:10,marginRight:4}},uploadStatus),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},onClick:()=>cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*0.8)},'−'),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},onClick:()=>cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*1.25)},'+'),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},title:'Decrease node/font size',
+          onClick:()=>setSizeScale(s=>Math.max(0.5,s-0.2))},'F−'),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},title:'Increase node/font size',
+          onClick:()=>setSizeScale(s=>Math.min(3,s+0.2))},'F+'),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},onClick:()=>cyRef.current&&cyRef.current.fit(50)},'Fit'),
+        h('button',{style:{...btnStyle,padding:'6px 10px'},onClick:()=>{
+          setFilterState({type:null,value:null});setNavHistory([]);
+          setTimeout(()=>cyRef.current&&cyRef.current.fit(50),100);
+        }},'Reset'),
+        h('div',{style:{display:'flex',alignItems:'center',marginLeft:4}},
+          h('label',{style:{color:'#aaa',fontSize:10,marginRight:4}},'Domains'),
+          h('input',{type:'checkbox',checked:showDomains,onChange:e=>setShowDomains(e.target.checked),style:{cursor:'pointer'}})
+        ),
+        h('div',{style:{display:'flex',alignItems:'center',marginLeft:4}},
+          h('label',{style:{color:'#aaa',fontSize:10,marginRight:4},title:'On: business (semantic) product names. Off: original physical table names.'},'Semantic'),
+          h('input',{type:'checkbox',checked:semanticNames,onChange:e=>setSemanticNames(e.target.checked),style:{cursor:'pointer'}})
+        ),
+        h('div',{style:{display:'flex',alignItems:'center',marginLeft:4}},
+          h('label',{style:{color:'#aaa',fontSize:10,marginRight:4},title:'Show agent-synthesised (_dbx_fk) foreign-key links. Off: only declared UC FKs.'},'dbx FK'),
+          h('input',{type:'checkbox',checked:showDbxFk,onChange:e=>setShowDbxFk(e.target.checked),style:{cursor:'pointer'}})
+        ),
+        h('select',{value:layout,onChange:e=>setLayout(e.target.value),style:{fontSize:11}},
+          h('option',{value:'circle'},'Circular'),
+          h('option',{value:'cose'},'Force (Cose)'),
+          h('option',{value:'concentric'},'Concentric'),
+          h('option',{value:'clustered'},'Clustered'),
+          h('option',{value:'grid'},'Grid')
+        )
+      )
+    ),
+
+    // ── Main body ────────────────────────────────────────
+    h('div',{style:{display:'flex',flex:1,overflow:'hidden'}},
+
+      // Left sidebar
+      h('div',{style:{width:250,background:'#1a1a2e',borderRight:'1px solid #333',
+                      display:'flex',flexDirection:'column',flexShrink:0}},
+        h('div',{style:{padding:'15px 15px 0',flexShrink:0}},
+          h('h3',{style:{margin:'0 0 3px',fontSize:14,color:'#fff'}},
+            graphData?(graphData.modelVersion?`${graphData.modelName} ${graphData.modelVersion}`:graphData.modelName):'Data Model'
+          ),
+          graphData&&h('span',{style:{color:'#888',fontSize:11,display:'block',marginBottom:10,
+                                      paddingBottom:10,borderBottom:'1px solid #444'}},
+            statsText
+          ),
+          h('input',{type:'text',placeholder:'Search domains, tables...',
+                     value:searchTerm,onChange:e=>setSearchTerm(e.target.value),
+                     style:{marginBottom:6}})
+        ),
+        h('p',{style:{color:'#666',fontSize:10,margin:'0 15px 6px',padding:0}},'Click + to expand, click name to view'),
+        h('div',{style:{flex:1,overflowY:'auto',padding:'0 15px 15px'}},
+          !graphData&&h('div',{style:{textAlign:'center',paddingTop:30}},
+            h('div',{style:{fontSize:32,marginBottom:10}},'📊'),
+            h('p',{style:{color:'#666',fontSize:12}},'Upload or load a model to begin')
+          ),
+          graphData&&sortedDomains.map(([dname,ddata])=>
+            h(TreeNode,{key:dname,domainName:dname,domainData:ddata,
+                        expandedDomains,expandedTables,searchTerm,
+                        onToggleDomain:handleToggleDomain,onToggleTable:handleToggleTable,
+                        onClickDomain:handleClickDomain,onClickTable:handleClickTable,
+                        onClickAttr:handleClickAttr})
+          )
+        )
+      ),
+
+      // Graph area
+      h('div',{style:{flex:1,position:'relative',background:'#0f0f1a',
+                      backgroundImage:'radial-gradient(circle at 1px 1px,#222 1px,transparent 0)',
+                      backgroundSize:'40px 40px'}},
+
+        // Back button
+        navHistory.length>0&&h('button',{
+          onClick:goBack,
+          style:{position:'absolute',top:15,left:15,zIndex:1000,padding:'10px 20px',
+                 background:'#FF6B6B',color:'#fff',border:'none',borderRadius:6,
+                 cursor:'pointer',fontSize:13,fontWeight:600,boxShadow:'0 2px 10px rgba(0,0,0,0.3)'}
+        },'← Back'),
+
+        // Filter info badge
+        filterInfoText&&h('div',{style:{position:'absolute',top:15,right:15,zIndex:1000,
+                                        padding:'8px 15px',background:'rgba(247,220,111,0.9)',
+                                        color:'#333',borderRadius:6,fontSize:12,fontWeight:600}},
+          filterInfoText),
+
+        // Model name badge (main view only)
+        modelBadge&&h('div',{style:{position:'absolute',top:15,right:15,zIndex:1000,
+                                     padding:'8px 15px',background:'rgba(78,205,196,0.9)',
+                                     color:'#fff',borderRadius:6,fontSize:12,fontWeight:600}},
+          modelBadge),
+
+        // Empty state
+        !graphData&&!isLoading&&!loadError&&h('div',{style:{position:'absolute',top:0,left:0,right:0,bottom:0,
+                                                             display:'flex',alignItems:'center',justifyContent:'center',zIndex:500}},
+          h('div',{style:{textAlign:'center'}},
+            h('div',{style:{fontSize:48,marginBottom:15}},'📊'),
+            h('p',{style:{color:'#888',fontSize:14}},'Upload a JSON file or load from Databricks')
+          )
+        ),
+
+        // Loading overlay
+        isLoading&&h('div',{style:{position:'absolute',top:0,left:0,right:0,bottom:0,
+                                    background:'rgba(15,15,26,0.85)',zIndex:998,
+                                    display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}},
+          h('div',{style:{color:'#BB8FCE',fontSize:13,marginBottom:16}},'Loading model...'),
+          h('div',{className:'spinner'})
+        ),
+
+        // Error display
+        loadError&&h('div',{style:{position:'absolute',top:'50%',left:'50%',
+                                    transform:'translate(-50%,-50%)',maxWidth:600,width:'90%',zIndex:1001}},
+          h('div',{style:{background:'#1a1a2e',padding:30,borderRadius:12,border:'1px solid #333',textAlign:'center',boxShadow:'0 10px 40px rgba(0,0,0,0.5)'}},
+            h('div',{style:{fontSize:48,marginBottom:15}},'⚠️'),
+            h('h2',{style:{color:'#FF6B6B',fontSize:20,marginBottom:15}},'Failed to Load Data Model'),
+            h('div',{style:{fontSize:13,background:'rgba(255,107,107,0.15)',padding:15,borderRadius:8,
+                             border:'2px solid #FF6B6B',textAlign:'left',wordBreak:'break-word',marginBottom:20}},
+              h('strong',{style:{color:'#FF6B6B'}},'Error: '),h('span',{style:{color:'#FFB347'}},loadError)
+            ),
+            h('button',{style:{...btnStyle,background:'#FF6B6B',marginRight:0},onClick:()=>setLoadError(null)},'Dismiss')
+          )
+        ),
+
+        // Cytoscape container
+        h('div',{ref:containerRef,style:{width:'100%',height:'100%',display:graphData?'block':'none'}})
+      ),
+
+      // Right panel
+      h('div',{style:{width:280,background:'#1a1a2e',borderLeft:'1px solid #333',
+                      display:'flex',flexDirection:'column',flexShrink:0,overflowY:'auto'}},
+        h(NodeInfoPanel,{
+          selectedNode:treeClick?null:selectedNode,
+          selectedEdge:treeClick?null:selectedEdge,
+          treeClick,graphData,
+          domainSizes,setDomainSizes,filterState
+        })
+      )
+    ),
+
+    // Version badge
+    h('div',{style:{position:'fixed',bottom:10,right:14,zIndex:3000,
+                    padding:'4px 10px',background:'rgba(0,0,0,0.6)',border:'1px solid #444',
+                    borderRadius:12,fontSize:11,color:'#bbb'}},'v1.1'),
+
+    // Repo browser dialog
+    showRepoDialog&&h(RepoBrowser,{
+      onLoadModel:(data,label)=>{
+        setIsLoading(true);setLoadError(null);
+        setUploadStatus(`Loading ${label.split('/').slice(-2).join('/')}…`);
+        setTimeout(()=>{
+          try{processModel(data,label);setUploadStatus('✓ '+label.split('/').slice(-2,-1)[0]+'/model.json');}
+          catch(err){setLoadError('Processing error: '+err.message);setIsLoading(false);setUploadStatus('✗ Error');}
+        },50);
+      },
+      onClose:()=>setShowRepoDialog(false)
+    })
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App,null));
+</script>
+</body>
+</html>

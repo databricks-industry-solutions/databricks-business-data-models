@@ -27,7 +27,7 @@ import os
 
 import pytest
 
-REPO = "/Users/amr.ali/Documents/projects/vibe-modelling-agent"
+REPO = "/Users/user/Documents/projects/vibe-modelling-agent"
 MARATHON = os.path.join(REPO, "runner/vov_v2_marathon.py")
 NB = os.environ.get("VOV_NB", os.path.join(REPO, "agent/dbx_vibe_modelling_agent.ipynb"))
 
@@ -54,8 +54,11 @@ def test_marathon_injects_self_run_id_into_every_task(marathon):
         for t in tasks:
             params = t["notebook_task"]["base_parameters"]
             assert params.get("vibe_session_id") == "{{job.run_id}}", (
+                f"task {t['task_key']} (installed={installed}) changed correlation identity"
+            )
+            assert params.get("databricks_task_run_id") == "{{task.run_id}}", (
                 f"task {t['task_key']} (installed={installed}) missing "
-                f"vibe_session_id={{job.run_id}} -> control-plane self-cancel cannot arm"
+                "dedicated task-run control-plane identity"
             )
             # self_run_id base-param is retired; it must NOT reappear.
             assert "self_run_id" not in params, (
@@ -67,8 +70,11 @@ def test_marathon_self_run_id_value_is_databricks_template(marathon):
     # Must be the literal template token so Databricks substitutes the real run id at runtime;
     # a hardcoded id or empty string would defeat the fix.
     spec = marathon.build_job_spec("ngo", installed=True)
-    vals = {t["notebook_task"]["base_parameters"].get("vibe_session_id") for t in spec["tasks"]}
-    assert vals == {"{{job.run_id}}"}
+    vals = {
+        t["notebook_task"]["base_parameters"].get("databricks_task_run_id")
+        for t in spec["tasks"]
+    }
+    assert vals == {"{{task.run_id}}"}
 
 
 # ---------------------------------------------------------------------------
@@ -80,9 +86,10 @@ def _agent_self_cancel_src():
         if c.get("cell_type") != "code":
             continue
         s = "".join(c.get("source", []))
-        # v4.0.8: the self-cancel run_id source is now vibe_session_id (self_run_id retired); the
-        # original self-cancel-runid-jobparam comment block is preserved alongside the new alias.
-        if "self-cancel-runid-jobparam" in s and 'dbutils.widgets.get("vibe_session_id")' in s:
+        if (
+            "self-cancel-session-id-rejected" in s
+            and 'dbutils.widgets.get("databricks_task_run_id")' in s
+        ):
             return s
     return None
 
@@ -92,8 +99,8 @@ def test_agent_self_run_id_fallback_present():
     if src is None:
         pytest.fail("FAIL-PRE: agent self-cancel self_run_id fallback ABSENT (expected pre-patch)")
     # the fallback must guard against an un-substituted literal and tag the source.
-    assert 'startswith("{{")' in src
-    assert '"job_param"' in src
+    assert "_v458_validate_jobs_run_id" in src
+    assert '"task_run_param"' in src
     # whole cell must still compile.
     ast.parse(src)
 
@@ -103,7 +110,8 @@ def test_agent_self_run_id_fallback_present():
 # (predicate mirrors the agent source line asserted to exist above)
 # ---------------------------------------------------------------------------
 def _accept(pr):
-    return bool(pr and str(pr).strip() and not str(pr).strip().startswith("{{"))
+    value = str(pr or "").strip()
+    return bool(value.isdigit() and int(value) > 0)
 
 
 def test_guard_accepts_real_run_id():
@@ -120,8 +128,12 @@ def test_guard_rejects_empty_and_whitespace():
     assert _accept(None) is False
 
 
+def test_guard_rejects_generated_uuid():
+    assert _accept("4a724d54-8bc4-4f2c-8bd7-33c2018a57d5") is False
+
+
 def test_guard_predicate_matches_agent_source():
     # ties the tested predicate to the live source (no §8.3 drift between test and code).
     src = _agent_self_cancel_src()
     assert src is not None
-    assert 'if _sc_pr and str(_sc_pr).strip() and not str(_sc_pr).strip().startswith("{{"):' in src
+    assert "_v459_resolve_self_cancel_run_id(" in src

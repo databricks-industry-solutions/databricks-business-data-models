@@ -3,7 +3,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vov_v2_marathon as M
 
-WS = "/Users/user@databricks.com"
+WS = "/Users/user@example.com"
 PROFILE = "<profile>"
 LOCAL_VIBE = "/tmp/basemvm/gov_transport/model_vibes.txt"
 BUDGET_S = 5400

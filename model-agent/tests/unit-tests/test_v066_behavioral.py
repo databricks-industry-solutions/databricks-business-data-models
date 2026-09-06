@@ -37,7 +37,7 @@
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _agent_src() -> str:
@@ -336,7 +336,7 @@ def test_v066_new10_industry_agnostic():
 # =============================================================================
 
 def test_v066_readme_current_version_bumped():
-    with open("/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md") as f:
+    with open("/Users/user/Documents/projects/vibe-modelling-agent/readme.md") as f:
         rd = f.read()
     assert "**v0.6.6**" in rd, "v0.6.6 not in readme (either as Current or in history)"
 

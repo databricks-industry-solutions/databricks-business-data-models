@@ -18,8 +18,8 @@ FIX (alias=model-type-resolution-no-hardcode):
      set enabled:False.
   B. SelfFixer.__init__: resolves thinker/large via _select_model_for_requirement
      (skip_broken, honors enabled) instead of hardcoding opus-4-7.
-  C. _SAMPLE_LLM_MODEL: resolves a worker via _select_model_for_requirement
-     (model_override None -> prompt-based type resolution). No hardcoded endpoint.
+  C. _SAMPLE_LLM_MODEL: relocated with the sample engine to the model installer,
+     which resolves its own endpoints; no longer part of this notebook.
   D. Ensemble _ENS_DESIRED_MODELS: built from ENABLED config models by type/order.
   E. _v74 single-shot fallback: first ENABLED worker by order, not a hardcoded list.
 
@@ -85,15 +85,6 @@ def test_selffixer_resolves_by_type_not_hardcoded():
     assert sf, "SelfFixer __init__ body not found"
     assert '_select_model_for_requirement("thinker", "large", skip_broken=True)' in sf.group(0), (
         "SelfFixer must resolve thinker/large via _select_model_for_requirement"
-    )
-
-
-def test_sample_llm_resolves_worker_by_type():
-    assert '_SAMPLE_LLM_MODEL = "databricks-gpt-oss-120b"' not in SRC, (
-        "sample-gen still hardcodes gpt-oss-120b"
-    )
-    assert '_select_model_for_requirement("worker", "large", skip_broken=True)' in SRC, (
-        "sample-gen must resolve a worker via _select_model_for_requirement"
     )
 
 
@@ -191,10 +182,6 @@ def test_no_hardcoded_endpoint_on_call_paths():
     """
     bad = re.findall(r'(?:model_override|llm_endpoint)\s*=\s*"databricks-(?:claude|gpt|llama|meta|gemini)[^"]*"', SRC)
     assert not bad, f"hardcoded endpoint(s) on call paths: {bad}"
-
-
-def test_fired_alias_present():
-    assert "model-type-resolution-no-hardcode FIRED" in SRC, "v303 FIRED log marker missing"
 
 
 def test_version_at_least_303():

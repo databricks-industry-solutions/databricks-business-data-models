@@ -9,7 +9,7 @@ They CANNOT be bounced mid-MVM (would kill the in-flight industry).
 This watcher polls the repo + manifests; once Consumer Goods lands, it bounces AWS.
 Once Mining lands, it bounces Azure.
 
-Run:  nohup python3 -u runner/auto_bounce_watcher.py > /Users/amr.ali/claude/vibe-agent/auto_bounce_watcher.log 2>&1 &
+Run:  nohup python3 -u runner/auto_bounce_watcher.py > /Users/user/claude/vibe-agent/auto_bounce_watcher.log 2>&1 &
 """
 import json
 import os
@@ -20,10 +20,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_PATH = "/Users/amr.ali/Documents/projects/vibe-business-data-models"
-LOG_FILE = "/Users/amr.ali/claude/vibe-agent/auto_bounce_watcher.log"
-STATE_FILE = "/Users/amr.ali/claude/vibe-agent/auto_bounce_watcher_state.json"
-PROJECT_ROOT = "/Users/amr.ali/Documents/projects/vibe-modelling-agent"
+REPO_PATH = "/Users/user/Documents/projects/vibe-business-data-models"
+LOG_FILE = "/Users/user/claude/vibe-agent/auto_bounce_watcher.log"
+STATE_FILE = "/Users/user/claude/vibe-agent/auto_bounce_watcher_state.json"
+PROJECT_ROOT = "/Users/user/Documents/projects/vibe-modelling-agent"
 
 POLL_INTERVAL_S = 60
 GLOBAL_VOLUME = "/Volumes/_root/default/root_vol"
@@ -35,11 +35,11 @@ TARGETS = [
         "industry_snake": "consumer_goods",
         "industry_repo_dir": "consumer_goods",
         "sectors": "retail_and_consumer_goods,manufacturing",
-        "runner_path": "/Users/user@databricks.com/vibe_runner_v73",
+        "runner_path": "/Users/user@example.com/vibe_runner_v73",
         "job_name": "dbx_vibe_modelling_sector_runner_v73_aws",
-        "pulse_file": "/Users/amr.ali/claude/vibe-agent/aws_pulses.txt",
-        "state_file": "/Users/amr.ali/claude/vibe-agent/aws_state.json",
-        "stdout_log": "/Users/amr.ali/claude/vibe-agent/aws_orchestrator_stdout.log",
+        "pulse_file": "/Users/user/claude/vibe-agent/aws_pulses.txt",
+        "state_file": "/Users/user/claude/vibe-agent/aws_state.json",
+        "stdout_log": "/Users/user/claude/vibe-agent/aws_orchestrator_stdout.log",
         "old_pid": 97464,
         "bounced": False,
     },
@@ -49,11 +49,11 @@ TARGETS = [
         "industry_snake": "mining",
         "industry_repo_dir": "mining",
         "sectors": "energy_and_utilities,public_sector_education_nonprofit,communications_media_entertainment,manufacturing",
-        "runner_path": "/Users/user@databricks.com/vibe_runner_v72",
+        "runner_path": "/Users/user@example.com/vibe_runner_v72",
         "job_name": "dbx_vibe_modelling_sector_runner_v72_azure",
-        "pulse_file": "/Users/amr.ali/claude/vibe-agent/azure_pulses.txt",
-        "state_file": "/Users/amr.ali/claude/vibe-agent/azure_state.json",
-        "stdout_log": "/Users/amr.ali/claude/vibe-agent/azure_orchestrator_stdout.log",
+        "pulse_file": "/Users/user/claude/vibe-agent/azure_pulses.txt",
+        "state_file": "/Users/user/claude/vibe-agent/azure_state.json",
+        "stdout_log": "/Users/user/claude/vibe-agent/azure_orchestrator_stdout.log",
         "old_pid": 33226,
         "bounced": False,
     },

@@ -44,7 +44,16 @@ def _load_cell_source(predicate):
 
 
 def _load_selffixer_cell():
-    return _load_cell_source(lambda s: "class SelfFixer" in s and "run_selffixer_or_skip" in s)
+    """The SelfFixer surface, however many cells the notebook currently spreads it over.
+
+    The class and its `run_selffixer_or_skip` entry point used to share one cell.
+    Requiring that stopped matching when they were split, which silently disabled
+    every test in this file, so join the cells instead of pinning their layout.
+    """
+    parts = [_load_cell_source(lambda s: "class SelfFixer" in s)]
+    if "def run_selffixer_or_skip" not in parts[0]:
+        parts.append(_load_cell_source(lambda s: "def run_selffixer_or_skip" in s))
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -134,10 +143,14 @@ def test_orchestrator_call_alias_present():
     for c in nb["cells"]:
         if c.get("cell_type") != "code": continue
         s = "".join(c.get("source", []))
-        if "alias=selffixer-orchestrator-call" in s and "run_selffixer_or_skip" in s and "_vibe_orchestrator.score()" in s:
+        if ("def run_selffixer_or_skip" not in s and "run_selffixer_or_skip(" in s
+                and "_vibe_orchestrator.score()" in s):
             found = True
             break
-    assert found, "selffixer-orchestrator-call wire-in site missing"
+    assert found, (
+        "SelfFixer must be CALLED from the orchestrator scoring path; a definition "
+        "with no call site is dead code (CLAUDE.md 8.4)"
+    )
 
 
 def test_industry_agnostic_no_hardcoded_names_in_prompt():

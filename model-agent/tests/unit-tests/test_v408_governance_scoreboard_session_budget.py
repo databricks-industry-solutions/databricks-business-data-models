@@ -73,7 +73,10 @@ def test_version_is_first_line_then_banner_POST():
     # banner moves one line down. Accept the release line at index 1, banner within the
     # first few lines.
     if lines[1].startswith("__RELEASE_VERSION__ = "):
-        assert ("AGENT BANNER" in lines[2]) or ("CELL 1" in lines[2]), lines[2]
+        assert any(
+            "AGENT BANNER" in line or "CELL 1" in line or "VIBE_MODELING_ASCII_ART" in line
+            for line in lines[2:7]
+        ), lines[2:7]
     else:
         assert ("AGENT BANNER" in lines[1]) or ("CELL 1" in lines[1]), lines[1]
 
@@ -190,9 +193,10 @@ def test_scoreboard_persists_via_active_writer_registry_BEHAVIORAL():
         ah.HeartbeatWatchdog.clear_active()
 
 
-# ============ FIX 3: vibe_session_id reused for self_run_id =================
-def test_self_cancel_reads_vibe_session_id_POST():
+# ============ FIX 3: dedicated task run ID controls self-cancel =============
+def test_self_cancel_reads_dedicated_task_run_id_POST():
     live = _src()
+    assert 'dbutils.widgets.get("databricks_task_run_id")' in live
     assert 'dbutils.widgets.get("vibe_session_id")' in live
     assert 'dbutils.widgets.get("self_run_id")' not in live
 
@@ -205,6 +209,7 @@ def test_self_cancel_read_self_run_id_in_v407_FAILPRE():
 def test_marathon_injects_vibe_session_id_runid():
     txt = MARATHON.read_text()
     assert '"vibe_session_id": "{{job.run_id}}"' in txt
+    assert '"databricks_task_run_id": "{{task.run_id}}"' in txt
     assert '"self_run_id":' not in txt
 
 

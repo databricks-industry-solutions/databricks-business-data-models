@@ -21,7 +21,7 @@ Covers 2 regressions exposed by the v0.6.2 telecom MVM v2 (vov) live-run audit:
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _agent_src() -> str:

@@ -355,7 +355,7 @@ def run_class_method_scenario(class_method: str, scenario: str) -> None:
         call_count=cc,
         defined_check=lambda: method_name in dir(cls) if cls else False,
         doc_alias_check=lambda: _method_def_has_docstring_or_alias(class_name, method_name),
-        slice_name=None,
+        slice_name=f"{class_name}.{method_name}",
         allow_property=method_name in dir(cls) and isinstance(getattr(cls, method_name, None), property),
     )
 

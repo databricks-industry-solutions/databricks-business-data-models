@@ -128,7 +128,6 @@ def _build_agent_helpers_module():
             "dbutils": _Stub(),
             "displayHTML": lambda *a, **k: None,
             "SparkSession": _Stub(),
-            "_FAKER_AVAILABLE": False,
             "_POOL_ENGINE_AVAILABLE": True,
             "_OBS_AVAILABLE": False,
         }

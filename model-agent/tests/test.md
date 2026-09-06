@@ -424,7 +424,7 @@ The watcher's per-pulse output format:
 |---|---|
 | Script | `/tmp/v200/v206_with_vibes_watcher.sh` |
 | Output stream | Cursor-visible background shell (`block_until_ms: 0`); writes pulses to stdout, captured by Cursor for UI display |
-| Process | `bash /tmp/v200/v206_with_vibes_watcher.sh`, pid recorded in the Cursor terminal file under `/Users/amr.ali/.cursor/projects/Users-amr-ali-Documents-projects-vibe-modelling-agent/terminals/` |
+| Process | `bash /tmp/v200/v206_with_vibes_watcher.sh`, pid recorded in the Cursor terminal file under `/Users/user/.cursor/projects/Users-user-Documents-projects-vibe-modelling-agent/terminals/` |
 | Pulse interval | 900s (15 min) |
 | Log mirror dir | `/tmp/v200/v206_with_vibes_logs/<BIZ>__<filename>` |
 | Auto-exit | When all 3 runs reach `TERMINATED`, `INTERNAL_ERROR`, or `SKIPPED` |
@@ -532,7 +532,7 @@ For each surfaced issue:
 
 | Path | Purpose |
 |---|---|
-| `/Users/user@databricks.com/dbx_vibe_modelling_agent_v206` | The notebook the JOB loads. Unique `object_id` proves the version. |
+| `/Users/user@example.com/dbx_vibe_modelling_agent_v206` | The notebook the JOB loads. Unique `object_id` proves the version. |
 | `/Volumes/healthcare_ecm_v1/_metamodel/vol_root/business/Healthcare/ecm_v1/model.json` | HC v1 input (read by VOV) |
 | `/Volumes/healthcare_ecm_v1/_metamodel/vol_root/business/Healthcare/ecm_v2/model.json` | HC v2 output (written by VOV) |
 | `/Volumes/healthcare_ecm_v1/_metamodel/vol_root/logs/Healthcare/ecm_v2/tiny_info_v2_ecm.log` | HC info log (the watcher mirrors this) |
@@ -563,7 +563,7 @@ Triggered automatically by the watcher when it prints `ALL 3 RUNS TERMINATED`. S
 7. **Metric-view parity** — `len(model.metric_views)` vs `information_schema.tables WHERE table_schema = '_metrics'`.
 8. **Vibe-adherence audit** — for each Google Doc, identify named entities, cross-reference v2 model, compute adherence %.
 9. **Honest 0–100 quality score per sub-version**, with each deduction tied to a §8.1 invariant or §9.4 signature.
-10. **Write two reports** to `/Users/amr.ali/claude/vibe-agent/v206-<run_tag>-{validation-report,model-quality-audit}.md` per §9.6.
+10. **Write two reports** to `/Users/user/claude/vibe-agent/v206-<run_tag>-{validation-report,model-quality-audit}.md` per §9.6.
 11. **If audit passes** (all §10.6 zero, adherence ≥80%, score ≥70): commit v206 to git per §1b ("no commit until success-verified") with the commit message citing the live run IDs as proof.
 12. **If audit fails**: identify root causes, group by class, prep v207 fix list, start the self-healing loop (§6) again.
 
@@ -608,7 +608,7 @@ When the user pings next, the response strategy depends on the watcher state:
 | All RUNNING, no anomalies | 1-3 | "Pulse #N — all green, log lines visible, startup-print FIRED confirmed in HC=K RT=K NC=K." |
 | All RUNNING, some §10.6 hits | any | "Pulse #N — `<signature>` detected in `<biz>` at line `<N>`. Root cause likely `<class>`. Decision: cancel + v207 OR let finish and v207 cycle. Recommend `<X>`." |
 | 1-2 TERMINATED, others RUNNING | any | "Partial terminate. Quick §9 spot-check on terminated runs; full audit deferred until all 3 finish." |
-| All TERMINATED | any | "Final pulse. Running §9 audit now. Reports will land at `/Users/amr.ali/claude/vibe-agent/v206-…-{validation,audit}.md`. Decision: commit v206 OR open v207 cycle." |
+| All TERMINATED | any | "Final pulse. Running §9 audit now. Reports will land at `/Users/user/claude/vibe-agent/v206-…-{validation,audit}.md`. Decision: commit v206 OR open v207 cycle." |
 | Watcher exited unexpectedly | n/a | "Watcher pid gone; investigate. Live pulling logs manually." |
 
 ---
@@ -967,7 +967,7 @@ This is the existing v0.8.4 P59 guard CORRECTLY refusing to soft-accept a 3/3-fa
 
 ### 12.14 Full 3-stage adherence audit (gov_transport + RT terminated; HC partial) — 2026-05-26 10:30 BST
 
-Executed Part-I Test Protocol § A–E end-to-end against the two terminated runs. Full report at `/Users/amr.ali/claude/vibe-agent/v206-full-audit.md`. Highlights:
+Executed Part-I Test Protocol § A–E end-to-end against the two terminated runs. Full report at `/Users/user/claude/vibe-agent/v206-full-audit.md`. Highlights:
 
 **gov_transport scorecard (985321305623237):**
 - Stage A — Vibe → Captured-Requirements: **98.8%** (85 / 86 REQs surfaced in ai_logs).

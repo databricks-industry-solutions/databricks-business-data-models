@@ -74,7 +74,7 @@ def _build_module_from_nb(path, name):
     module = types.ModuleType(name)
     module.__dict__.update({
         "spark": _Stub(), "dbutils": _Stub(), "displayHTML": lambda *a, **k: None,
-        "SparkSession": _Stub(), "_FAKER_AVAILABLE": False, "_POOL_ENGINE_AVAILABLE": True,
+        "SparkSession": _Stub(), "_POOL_ENGINE_AVAILABLE": True,
         "_OBS_AVAILABLE": False,
     })
     tree = ast.parse(src)

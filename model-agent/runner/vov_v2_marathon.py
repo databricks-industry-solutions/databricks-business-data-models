@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 AGENT_VER = "424"  # matches __AGENT_VERSION__ 4.2.4 (semver minus dots, §3a); never run stale
-AGENT_PATH = f"/Users/user@databricks.com/dbx_vibe_modelling_agent_v{AGENT_VER}"
+AGENT_PATH = f"/Users/user@example.com/dbx_vibe_modelling_agent_v{AGENT_VER}"
 STAGE_DIR = "/tmp/vov_stage"
 OUT_DIR = "/tmp/vov_out"
 PULSE_FILE = os.path.expanduser("~/claude/vibe-agent/vov2_pulses.txt")
@@ -515,7 +515,8 @@ def build_job_spec(ind, installed=False):
     # no run_id tags, e.g. <profile> tag_keys=[]). Replaces the retired separate self_run_id base-param.
     common = {"business_name": ind, "business_description": desc,
               "deployment_catalog": cat, "generate_samples": "0",
-              "vibe_session_id": "{{job.run_id}}"}
+              "vibe_session_id": "{{job.run_id}}",
+              "databricks_task_run_id": "{{task.run_id}}"}
     install = dict(common, operation="install model", model_version="1",
                    data_model_scopes=ECM_SCOPE,
                    context_file=f"{base}/model/model.json", model_vibes="")

@@ -160,7 +160,7 @@ def test_orchestrator_constants_match_user_directives():
     src = ORCHESTRATOR.read_text()
     assert 'DEFAULT_PROFILE = "<profile>"' in src
     assert 'DEFAULT_GLOBAL_VOLUME = "/Volumes/_root/default/root_vol"' in src
-    assert 'DEFAULT_RUNNER_PATH = "/Users/user@databricks.com/vibe_runner_v71"' in src
+    assert 'DEFAULT_RUNNER_PATH = "/Users/user@example.com/vibe_runner_v71"' in src
     expected_block = "\n".join([f'    "{f}",' for f in SECTOR_FILE_ORDER])
     assert expected_block in src, (
         "orchestrator SECTOR_FILES_ORDER must list files smallest-to-largest exactly as test expects"

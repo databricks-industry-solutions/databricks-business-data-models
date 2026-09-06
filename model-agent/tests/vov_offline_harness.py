@@ -13,7 +13,7 @@ import types
 
 NB = os.environ.get(
     "VOV_NB",
-    "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb",
+    "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb",
 )
 
 # Function/class families the predicate transitively needs.

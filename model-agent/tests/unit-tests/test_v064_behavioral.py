@@ -19,7 +19,7 @@ Covers 3 concurrency caps lifted to drive the v0.6.3 v1 run from 186 min toward 
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _agent_src() -> str:
@@ -127,7 +127,7 @@ def test_v064_b3_no_continue_inside_helper():
 # Test-suite hygiene — version-history readme entry & deploy alias updated
 # =============================================================================
 
-README = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md"
+README = "/Users/user/Documents/projects/vibe-modelling-agent/readme.md"
 
 
 def _readme_src() -> str:

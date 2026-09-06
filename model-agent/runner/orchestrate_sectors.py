@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 DEFAULT_PROFILE = "<profile>"
-DEFAULT_RUNNER_PATH = "/Users/user@databricks.com/vibe_runner_v71"
+DEFAULT_RUNNER_PATH = "/Users/user@example.com/vibe_runner_v71"
 DEFAULT_GLOBAL_VOLUME = "/Volumes/_root/default/root_vol"
 DEFAULT_SECTOR_UPLOAD_DIR = "_sectors"
 DEFAULT_PULSE_FILE = os.path.expanduser("~/claude/vibe-agent/global_run_pulses.txt")

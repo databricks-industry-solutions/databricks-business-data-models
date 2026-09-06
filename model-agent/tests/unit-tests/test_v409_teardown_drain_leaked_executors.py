@@ -46,8 +46,8 @@ def test_teardown_drain_removes_leaked_nondaemon_executor(capsys):
         + str([t.name for t in after])
     )
     out = capsys.readouterr().out
-    assert "[teardown-drain-leaked-executors FIRED v4.0.9]" in out
-    assert "alias=teardown-drain-leaked-executors" in out
+    assert "[teardown-drain-bounded FIRED v4.5.8]" in out
+    assert "alias=teardown-drain-bounded" in out
     assert "shutdown_executors=" in out
 
 

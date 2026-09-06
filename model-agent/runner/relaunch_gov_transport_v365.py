@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import base_mvm_proof as B  # noqa: E402
 
 M = B.M
-NEW = "/Users/user@databricks.com/dbx_vibe_modelling_agent_v365"
+NEW = "/Users/user@example.com/dbx_vibe_modelling_agent_v365"
 B.AGENT_PATH = NEW
 M.AGENT_PATH = NEW
 

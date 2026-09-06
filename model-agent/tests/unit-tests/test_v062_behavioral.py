@@ -16,7 +16,7 @@ import ast
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
 
 
 def _agent_src() -> str:
@@ -272,7 +272,7 @@ def test_v062_notebook_cells_all_parse():
 def test_v062_version_marker_v062_in_notebook_and_readme():
     src = _agent_src()
     assert "v0.6.2" in src
-    readme = open("/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md").read()
+    readme = open("/Users/user/Documents/projects/vibe-modelling-agent/readme.md").read()
     # v0.6.2 must remain in the version-history table even after later releases
     assert "**v0.6.2**" in readme
 

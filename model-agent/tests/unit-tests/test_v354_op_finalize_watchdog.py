@@ -43,18 +43,18 @@ def test_v354_helper_defined_once_before_safe_exit():
     assert src.index("def _arm_finalization_watchdog") < src.index("def _safe_notebook_exit")
 
 
-def test_v354_four_distinct_call_sites():
+def test_v354_three_distinct_call_sites():
     calls = []
-    for c in _nb()["cells"]:
-        for l in c["source"]:
+    for src in _code_cells():
+        for l in src.split("\n"):
             if "_arm_finalization_watchdog(widgets_values" in l and "def " not in l:
                 calls.append(l)
     sources = {s for s in ("install model", "uninstall model version",
-                           "generate sample data", "pipeline-finally")
+                           "pipeline-finally")
                if any(f'source="{s}"' in c for c in calls)}
     assert sources == {"install model", "uninstall model version",
-                       "generate sample data", "pipeline-finally"}, sources
-    assert len(calls) == 4
+                       "pipeline-finally"}, sources
+    assert len(calls) == 3
 
 
 def test_v354_install_arms_before_volume_copy_and_before_safe_exit():

@@ -109,23 +109,6 @@ class TestG4ManagedLocation:
 # ─────────────────────────────────────────────────────────────────────────────
 # G5 (alias M5) — sample-gen log tee finalize+copy
 # ─────────────────────────────────────────────────────────────────────────────
-class TestG5SampleGenLogTee:
-    def test_atexit_register_present_in_sample_gen(self, agent_src):
-        idx = agent_src.find("alias: G5-FIX")
-        assert idx != -1, "G5 alias sentinel missing in agent"
-        # Look downstream for atexit registration (alias may be _sg_atexit_mod)
-        body = agent_src[idx:idx + 3000]
-        assert "atexit" in body and ".register(" in body, (
-            "G5 fix REVERTED — atexit not registered to flush sample-gen log on crash."
-        )
-
-    def test_sample_log_finalize_copy_to_volume(self, agent_src):
-        assert "samples_v" in agent_src, (
-            "G5 fix REVERTED — sample log volume path missing."
-        )
-        assert "alias: G5-FIX" in agent_src, "G5 commit-msg alias sentinel missing."
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # G8 — context ladder wired to FK-RES single-batch path
 # ─────────────────────────────────────────────────────────────────────────────

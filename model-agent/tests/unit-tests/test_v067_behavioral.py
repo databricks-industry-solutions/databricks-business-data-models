@@ -15,8 +15,8 @@ convention canonicalisation only.
 import json
 import re
 
-NB = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
-README = "/Users/amr.ali/Documents/projects/vibe-modelling-agent/readme.md"
+NB = "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb"
+README = "/Users/user/Documents/projects/vibe-modelling-agent/readme.md"
 
 
 def _agent_src() -> str:

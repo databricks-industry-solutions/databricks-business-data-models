@@ -557,7 +557,7 @@ Equally important — affirmatively detect and record these, because absence ove
 
 ### 9.6 Reporting structure (what to write after every pipeline run)
 
-Two documents, saved to `/Users/amr.ali/claude/vibe-agent/`:
+Two documents, saved to `/Users/user/claude/vibe-agent/`:
 
 **A. Validation report (`<run-id>-validation-report.md`):**
 1. Summary (commit, run_id, duration, PASSED/FAILED/SKIPPED if via vibe_tester)
@@ -592,7 +592,7 @@ Two documents, saved to `/Users/amr.ali/claude/vibe-agent/`:
 | info + error logs (per sub-version) | `/tmp/<run_tag>_logs/<version>/{info,error}.log` |
 | merged tester logs + test_summary | `/tmp/<run_tag>_logs/{merged_info,merged_error,test_summary,quality_report}.log` |
 | Physical catalog state dump | `/tmp/<run_tag>_logs/_metamodel_dump.json` (via a small extractor notebook) |
-| Validation + audit reports | `/Users/amr.ali/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md` |
+| Validation + audit reports | `/Users/user/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md` |
 
 ### 9.8 Anti-rules — never do this during model-level audit
 
@@ -614,7 +614,7 @@ Append a new regression signature or positive signal to §9.4/§9.5 whenever a n
 This is the canonical loop the user expects every coding task to follow. Do NOT ask the user to repeat any of these steps — execute them yourself and report progress.
 
 ### 10.1 Inputs the user provides
-1. A previous run's log/error file (e.g. `/Users/amr.ali/claude/vibe-agent/error_NN.txt`).
+1. A previous run's log/error file (e.g. `/Users/user/claude/vibe-agent/error_NN.txt`).
 2. Optionally, a Databricks job-run URL whose terminal logs you must collect.
 3. A target business and vibe (or "no vibe" for default behaviour).
 
@@ -637,10 +637,10 @@ For EACH iteration:
    - Co-authored-by: Isaac
 10. **Verify push reachability** — `git ls-remote origin dev | grep <sha>` and `git branch --contains <sha>` per §8.6/§8.7. NEVER claim "shipped" without this verification.
 11. **Re-deploy + re-submit — VERSIONED PATHS ONLY**:
-    a. Upload agent to `/Users/user@databricks.com/dbx_vibe_modelling_agent_v<NN>` (NOT canon path — canon-cache renders post-deploy fixes invisible).
-    b. Upload tester to `/Users/user@databricks.com/vibe_tester_v<NN>` (versioned).
-    c. Upload runner to `/Users/user@databricks.com/vibe_runner_v<NN>` (versioned).
-    d. **Patch the JOB definition** so every task's `notebook_task.notebook_path` points at the versioned agent: `databricks jobs reset --json @<patch>` after editing `notebook_path` to `/Users/user@databricks.com/dbx_vibe_modelling_agent_v<NN>`.
+    a. Upload agent to `/Users/user@example.com/dbx_vibe_modelling_agent_v<NN>` (NOT canon path — canon-cache renders post-deploy fixes invisible).
+    b. Upload tester to `/Users/user@example.com/vibe_tester_v<NN>` (versioned).
+    c. Upload runner to `/Users/user@example.com/vibe_runner_v<NN>` (versioned).
+    d. **Patch the JOB definition** so every task's `notebook_task.notebook_path` points at the versioned agent: `databricks jobs reset --json @<patch>` after editing `notebook_path` to `/Users/user@example.com/dbx_vibe_modelling_agent_v<NN>`.
     e. Verify the JOB now points at the versioned path: `databricks jobs get <job_id> | python3 -c "..."` shows all tasks → `dbx_vibe_modelling_agent_v<NN>`.
     f. Then submit a fresh run via `databricks jobs run-now <job_id>`. Each unique versioned path has a UNIQUE workspace `object_id`, so the executor pool's notebook cache CANNOT serve a stale version.
     g. NEVER trust the canon path for deploy verification — always export the versioned archive and grep for the new aliases.
@@ -652,7 +652,7 @@ For EACH iteration:
 Once tiny is 100% clean:
 1. Submit an airline MVM run with `model_vibes=""` (no vibe) and the standard widget defaults.
 2. Apply §9 model-level validation methodology to the artifacts.
-3. Produce the two reports per §9.6 (validation-report + model-quality-audit) under `/Users/amr.ali/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md`.
+3. Produce the two reports per §9.6 (validation-report + model-quality-audit) under `/Users/user/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md`.
 4. Honest 0–100 score per sub-version (§9.6 B.8) — back every deduction with a §8.1 invariant or §9.4 signature. The user expects 100% honesty; cover-ups will be caught and called out.
 
 ### 10.4 Autonomous-mode invariants (when the user is asleep / away)
@@ -754,7 +754,7 @@ Verify: `databricks jobs list` shows ONLY the canonical JOB.
 
 **Step 5 — Upload agent + tester + runner to VERSIONED paths at user-root.**
 ```bash
-WS="/Users/<user>@databricks.com"
+WS="/Users/<user>@example.com"
 databricks workspace import "$WS/dbx_vibe_modelling_agent_v<NN>" --file agent/dbx_vibe_modelling_agent.ipynb --format JUPYTER --language PYTHON --overwrite --profile <profile>
 databricks workspace import "$WS/vibe_tester_v<NN>" --file tests/vibe_tester.ipynb --format JUPYTER --language PYTHON --overwrite --profile <profile>
 databricks workspace import "$WS/vibe_runner_v<NN>" --file runner/vibe_runner.ipynb --format JUPYTER --language PYTHON --overwrite --profile <profile>
@@ -795,7 +795,7 @@ Verify: `databricks jobs get <JOB_ID>` shows every task `notebook_path` = `dbx_v
 - Capture the new `run_id`. Add it to your tracking task (`TaskUpdate`).
 
 **Step 9 — Start the autonomous poller.**
-- Background bash (NOT `Monitor` — needs approvals): every ~120s, `databricks fs cp` every log file under `/Volumes/<catalog>/_metamodel/vol_root/logs/...` to a local mirror; categorize new lines; append a PULSE block to `/Users/amr.ali/claude/vibe-agent/error_NN.txt`.
+- Background bash (NOT `Monitor` — needs approvals): every ~120s, `databricks fs cp` every log file under `/Volumes/<catalog>/_metamodel/vol_root/logs/...` to a local mirror; categorize new lines; append a PULSE block to `/Users/user/claude/vibe-agent/error_NN.txt`.
 - Start a 5-minute pulse loop that prints `state + per-task progress + last 10 log lines + commentary` to stdout.
 
 **Step 10 — Wait for terminate.**
@@ -1105,7 +1105,7 @@ Before touching anything:
     ```
     Diff each schema's table list vs `domain['products']`. Same for `information_schema.columns` vs attributes, and `_metrics` schema vs `metric_views`. Any drift is an R2-class regression — report PRESENT.
 
-16. **Two reports per §9.6** — save to `/Users/amr.ali/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md`. The user rule "never generate .md" is subordinate to the §9.6 requirement which the user has historically demanded. If in doubt ask.
+16. **Two reports per §9.6** — save to `/Users/user/claude/vibe-agent/<run-tag>-{validation-report,model-quality-audit}.md`. The user rule "never generate .md" is subordinate to the §9.6 requirement which the user has historically demanded. If in doubt ask.
 
 17. **§6 brutal honesty score** — end every delivery message with a 0-100 score, per-deduction evidence, explicit "what I missed". Score against the deployed run, not the local commit.
 

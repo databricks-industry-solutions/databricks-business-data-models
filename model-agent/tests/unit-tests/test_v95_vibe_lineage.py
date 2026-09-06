@@ -715,15 +715,6 @@ class TestV93StepGenerateLineage(unittest.TestCase):
         writes = self._run_step(wv)
         self.assertEqual(writes, [])
 
-    def test_generate_samples_operation_does_not_write_lineage(self):
-        wv = _build_widgets_values(
-            operation='generate sample data',
-            requirements=[{'req_id': 'VREQ-X', 'text': 'samples'}],
-            target_volume='/tmp/lineage_test_samples',
-        )
-        writes = self._run_step(wv)
-        self.assertEqual(writes, [])
-
     def test_empty_vibes_and_empty_requirements_no_artifact(self):
         wv = _build_widgets_values(
             operation='new base model',

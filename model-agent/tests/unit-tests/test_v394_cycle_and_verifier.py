@@ -31,7 +31,7 @@ import pytest
 
 NB = os.environ.get(
     "VOV_NB",
-    "/Users/amr.ali/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb",
+    "/Users/user/Documents/projects/vibe-modelling-agent/agent/dbx_vibe_modelling_agent.ipynb",
 )
 
 LG = logging.getLogger("t394")

@@ -22,8 +22,8 @@ import os
 import re
 import sys
 
-VIBES = "/Users/amr.ali/Documents/projects/vibe-business-data-models-v2/vibes"
-V2REPO = "/Users/amr.ali/Documents/projects/vibe-business-data-models-v2"
+VIBES = "/Users/user/Documents/projects/vibe-business-data-models-v2/vibes"
+V2REPO = "/Users/user/Documents/projects/vibe-business-data-models-v2"
 OUT = os.path.expanduser("~/claude/vibe-agent/v2_groundtruth")
 
 
