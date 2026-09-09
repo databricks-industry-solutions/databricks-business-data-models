@@ -17943,7 +17943,7 @@ ind:preferredSeatingLocation rdf:type rdf:Property ;
 
 ind:prmCategory rdf:type rdf:Property ;
     rdfs:label 'Prm Category' ;
-    rdfs:comment 'IATA standard PRM category code. WCHR=wheelchair for ramp, WCHS=wheelchair for stairs, WCHC=wheelchair for cabin seat, WCBD=dry cell battery wheelchair, WCBW=wet cell battery wheelchair, WCMP=manual wheelchair, BLND=blind, DEAF=deaf, DPNA=disabled passenger needing assistance, MAAS=meet and assist. [ENUM-REF-CANDIDATE: WCHR|WCHS|WCHC|WCBD|WCBW|WCMP|BLND|DEAF|DPNA|MAAS — 10 candidates stripped; promote to reference product]' ;
+    rdfs:comment 'IATA standard PRM category code. WCHR=wheelchair for ramp, WCHS=wheelchair for stairs, WCHC=wheelchair for cabin seat, customerD=dry cell battery wheelchair, customerW=wet cell battery wheelchair, WCMP=manual wheelchair, BLND=blind, DEAF=deaf, DPNA=disabled passenger needing assistance, MAAS=meet and assist. [ENUM-REF-CANDIDATE: WCHR|WCHS|WCHC|customerD|customerW|WCMP|BLND|DEAF|DPNA|MAAS — 10 candidates stripped; promote to reference product]' ;
     rdfs:domain ind:AccessibilityProfile ;
     rdf:type owl:DatatypeProperty ;
     rdfs:range xsd:string .

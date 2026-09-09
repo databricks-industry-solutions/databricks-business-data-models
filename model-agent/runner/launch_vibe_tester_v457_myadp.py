@@ -21,7 +21,7 @@ M.PULSE_FILE = os.path.expanduser("~/claude/vibe-agent/tester463_myadp_pulses.tx
 M.STATE_FILE = os.path.expanduser("~/claude/vibe-agent/tester463_myadp_state.json")
 M.KILL_FILE = os.path.expanduser("~/claude/vibe-agent/tester463_myadp_KILL")
 M.PULSE_S = 300
-M.WAREHOUSE[PROFILE] = "2ad1b26db73a7c6f"
+M.WAREHOUSE[PROFILE] = "<WAREHOUSE_ID>"
 
 
 def build_spec():

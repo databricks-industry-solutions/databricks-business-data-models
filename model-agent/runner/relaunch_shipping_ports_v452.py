@@ -2,7 +2,7 @@
 """v4.5.2 shipping_ports VOV relaunch on the idle, isolated fe-gcp workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md 3d) to run shipping_ports v1 ECM -> v2 ECM -> v2 MVM with
-the merged USER-KING reviewer next_vibes (Ahmed Elmaadawy / DP World review, R1-R9) on the LATEST fixed
+the merged USER-KING reviewer next_vibes (SME review, R1-R9) on the LATEST fixed
 agent v4.5.2. v4.5.0 already lands the 18 named tables via GAP-5 (100% reviewer adherence in the v4.5.0
 run). v4.5.2 fixes the residual ECM structural miss: the reviewer finalizer stubbed mutual FK pairs
 between 3 sibling product pairs (transhipment<->transhipment_leg, container_condition_report<->

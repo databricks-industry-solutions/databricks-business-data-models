@@ -1,6 +1,6 @@
 ================================================================================
 USER-KING REVIEWER DIRECTIVES - SUPREME AUTHORITY (CLAUDE.md §3c)
-Source: Human SME review of Retail v1 by Ruslan Dautkhanov (2026-05-21),
+Source: Human SME review of Retail v1,
 recorded in the "Active Vibe Models Enriched" tracking sheet (Reviewer Notes).
 These reviewer requirements OUTRANK every heuristic, score, and LLM opinion.
 Apply ALL of them to the ECM (and carry them through to the MVM on shrink).

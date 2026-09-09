@@ -143,7 +143,7 @@ must point at that exact version.
 | `<profile>` | GCP field-eng | `d6d89fb9fd47b835` | travel_hospitality, consumer_goods, automotive |
 | `<profile>` | AWS field-eng | `862f1d757f0424f7` | ngo, retail, healthcare |
 | `<profile>` | GCP personal | `2023d0a3a188bd24` | restaurants, semiconductors, media_broadcasting |
-| `<profile>` | Azure personal | `2ad1b26db73a7c6f` | water_utilities, manufacturing |
+| `<profile>` | Azure personal | `<WAREHOUSE_ID>` | water_utilities, manufacturing |
 | `my-uae` | Azure personal | `6b2c33b3b2aae3ac` | construction, health_insurance |
 
 (`logfood` is internal Databricks telemetry — do NOT run the agent there.)

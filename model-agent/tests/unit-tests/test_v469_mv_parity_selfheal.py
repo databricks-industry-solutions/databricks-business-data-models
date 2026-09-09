@@ -1,6 +1,6 @@
 """v4.6.9 behavioral tests: metric-view strict-parity SELF-HEAL + same-target DEDUP.
 
-Root cause (WCB Alberta v4.6.8 FAILED, missing=['investment_custodian_reconciliation']):
+Root cause (a customer v4.6.8 FAILED, missing=['investment_custodian_reconciliation']):
 two generated MV statements collided on the IDENTICAL physical target name, so the
 declared-vs-physical parity set diverged into a phantom `missing` even though the base
 table was fully built and the parallel installer reported 0 failed. The in-installer

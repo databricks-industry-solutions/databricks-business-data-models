@@ -44,13 +44,13 @@ M.PULSE_FILE = os.path.expanduser("~/claude/vibe-agent/gensamples471_pulses.txt"
 M.STATE_FILE = os.path.expanduser("~/claude/vibe-agent/gensamples471_state.json")
 M.KILL_FILE = os.path.expanduser("~/claude/vibe-agent/gensamples471_KILL")
 M.PULSE_S = 300
-M.WAREHOUSE[PROFILE] = "2ad1b26db73a7c6f"
+M.WAREHOUSE[PROFILE] = "<WAREHOUSE_ID>"
 M._IND_PROFILE = {BUSINESS: PROFILE}
 M.cat_name = lambda ind: CATALOG  # noqa: E731
 
 _PREFERRED_LOCATION = (
-    "abfss://unity-catalog-storage@dbstoragem6ow6jhr3huvi.dfs.core.windows.net/"
-    "7405617889454112"
+    "abfss://unity-catalog-storage@<STORAGE_ACCOUNT>.dfs.core.windows.net/"
+    "<CONTAINER_ID>"
 )
 
 

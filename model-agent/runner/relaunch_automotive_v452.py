@@ -2,7 +2,7 @@
 """v4.5.2 automotive VOV regen on the idle, isolated fe-aws workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md 3d) to run automotive v1 ECM -> v2 ECM -> v2 MVM with the
-merged USER-KING reviewer next_vibes (Max Koehler value-chain review) on the LATEST fixed agent v4.5.2.
+merged USER-KING reviewer next_vibes (SME value-chain review) on the LATEST fixed agent v4.5.2.
 v4.5.2 adds v452-post-finalize-cycle-guard: the deterministic _v403 serialize cycle guard is re-run at the
 TRUE-last mutator boundary (AFTER _v441_reviewer_finalization), so mutual FK pairs the reviewer finalizer
 stubs between two sibling products (A.b_id->B, B.a_id->A) can no longer ship as 2-cycles / bidirectional

@@ -9,7 +9,7 @@ Exact crash (agent 4.5.5, new base model / ECM):
     AttributeError: 'str' object has no attribute 'get'
 
 Reporter cases covered:
-  1. free-text narrative string (WCB Alberta-class judge drift)
+  1. free-text narrative string (a customer-class judge drift)
   2. JSON-encoded string of the analysis object
   3. already-dict happy path (must not change)
   4. missing key -> default {}
@@ -26,7 +26,7 @@ NB = os.path.join(os.path.dirname(__file__), "..", "..", "agent", "dbx_vibe_mode
 
 # Reporter reproduction: complex workers'-compensation narrative as free-text
 # selection_analysis (the shape that crashed step_create_logical_schema line 4414).
-_WCB_STYLE_FREE_TEXT = (
+_customer_STYLE_FREE_TEXT = (
     "Resolved overlaps across claims lifecycle, premium assessment, experience "
     "rating, and funding discipline variants; kept 'claims' over 'claim_mgmt', "
     "merged premium_assessment into assessment."
@@ -154,7 +154,7 @@ def test_wiring_matches_issue21_fix_site():
 
 def test_issue21_fail_pre_free_text_selection_analysis_raises_attributeerror():
     """Reporter case 1: narrative string -> exact AttributeError from issue body."""
-    judge = _issue21_judge(_WCB_STYLE_FREE_TEXT)
+    judge = _issue21_judge(_customer_STYLE_FREE_TEXT)
     with pytest.raises(AttributeError, match="'str' object has no attribute 'get'"):
         _reporter_pre_patch_path(judge)
 
@@ -164,7 +164,7 @@ def test_issue21_pass_post_free_text_coerces_to_empty_dict():
     coerce_dict, coerce_list = _load_coerce_helpers()
     logs = []
     sa, dups, adds = _reporter_post_patch_path(
-        coerce_dict, coerce_list, _issue21_judge(_WCB_STYLE_FREE_TEXT), logs
+        coerce_dict, coerce_list, _issue21_judge(_customer_STYLE_FREE_TEXT), logs
     )
     assert sa == {}
     assert dups == []
