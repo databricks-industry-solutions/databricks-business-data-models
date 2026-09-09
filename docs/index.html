@@ -665,6 +665,28 @@
   .tour-skip{background:transparent;border:0;color:var(--faint);cursor:pointer;
     font:inherit;font-size:12px;padding:6px 4px}
   .tour-skip:hover{color:var(--muted)}
+
+  /* ERD relationship lines. Routing happens in JS; this only handles the
+     resting/hover look and the invisible fat path that makes them clickable. */
+  .erd-link{stroke:var(--flow-neutral);fill:none;stroke-width:1.5;
+    stroke-linejoin:round;stroke-linecap:round;transition:stroke .12s,stroke-width .12s}
+  .erd-hit{stroke:transparent;fill:none;stroke-width:15;pointer-events:stroke;cursor:pointer}
+  .erd-conn:hover .erd-link,.erd-conn.sel .erd-link{stroke:var(--brand);stroke-width:2.5}
+  /* the crow's foot and the bar are separate marker glyphs, so the highlight
+     has to swap them rather than recolour them */
+  .erd-conn:hover .erd-link,.erd-conn.sel .erd-link{
+    marker-start:url(#erd-many-hi);marker-end:url(#erd-one-hi)}
+  /* the name rides in an opaque chip so it stays readable wherever the route
+     puts it - over a gutter, over another line, or over a card */
+  .erd-chip{fill:var(--card);stroke:var(--line-strong);stroke-width:1;rx:3;pointer-events:none}
+  .erd-label{fill:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:9.5px;pointer-events:none;dominant-baseline:central}
+  .erd-conn:hover .erd-chip,.erd-conn.sel .erd-chip{fill:var(--card);stroke:var(--brand)}
+  .erd-conn:hover .erd-label,.erd-conn.sel .erd-label{fill:var(--brand);font-weight:700}
+  /* past a few dozen links every name at once is a grey haze, so a dense
+     diagram keeps them for the link under the pointer or the selected one */
+  .erd-dense .erd-tag{display:none}
+  .erd-dense .erd-conn:hover .erd-tag,.erd-dense .erd-conn.sel .erd-tag{display:block}
 </style>
 </head>
 <body>
@@ -821,6 +843,11 @@ function extractGraph(dataModel) {
 
       nodes.push({
         data:{id:fullId,label:tname,
+              erd_label:[tname.toUpperCase(),'--------------------------------',...attrList.map(a=>{
+                const marker=a.pk?'PK ':a.fk?'FK ':'   ';
+                return `${marker}${String(a.name).padEnd(28,' ')} ${a.type||'UNKNOWN'}`;
+              })].join('\n'),
+              erd_height:Math.max(90,56+attrList.length*16),
               parent:`domain_${dname}`,type:'table',
               domain:dname,subdomain,attribute_count:attrList.length,
               fk_count:fkCount,tag_count:tagArr.length,color,slot},
@@ -1174,6 +1201,23 @@ function getStylesheet(showDomains=true,sizeScale=1,t=null){
       fontSize:fs(11),fontWeight:'500',color:t.ink,textMarginY:nd(7),
       textBackgroundColor:t.card,textBackgroundOpacity:1,
       textBackgroundPadding:nd(2)+'px '+nd(5)+'px',textBackgroundShape:'roundrectangle',
+    }},
+    {selector:'.erd-node',style:{
+      shape:'round-rectangle',width:nd(310),height:'data(erd_height)',padding:nd(10),
+      backgroundColor:t.card,borderWidth:2,borderColor:'data(color)',
+      content:'data(erd_label)',textValign:'center',textHalign:'center',textJustify:'left',
+      textWrap:'wrap',textMaxWidth:nd(290),fontFamily:'monospace',fontSize:fs(10),fontWeight:'500',
+      color:t.ink,textBackgroundOpacity:0,
+    }},
+    {selector:'.erd-node:selected',style:{borderWidth:4,borderColor:t.gold}},
+    {selector:'.erd-center-node',style:{borderWidth:4,borderColor:t.gold}},
+    {selector:'.erd-focus-edge',style:{
+      width:3,lineColor:t.flow,targetArrowColor:t.flow,targetArrowShape:'tee',
+      sourceArrowColor:t.flow,sourceArrowShape:'vee',curveStyle:'taxi',taxiDirection:'auto',opacity:1,
+      label:'data(label)',fontSize:fs(10),fontWeight:'600',color:t.ink,
+      textBackgroundColor:t.card,textBackgroundOpacity:1,
+      textBackgroundPadding:nd(3)+'px '+nd(6)+'px',textBackgroundShape:'roundrectangle',
+      textRotation:'autorotate',
     }},
     {selector:'.domain-view-node',style:{
       shape:'ellipse',width:nd(42),height:nd(42),backgroundColor:'data(color)',
@@ -1875,8 +1919,16 @@ function ThemeControls({theme,onTheme,palette,onPalette}){
   );
 }
 
-function GraphViewToggles({showDomains,onShowDomains,animate,onAnimate}){
+function GraphViewToggles({showDomains,onShowDomains,animate,onAnimate,erdMode,onErdMode,erdCoreOnly,onErdCoreOnly}){
   return h(React.Fragment,null,
+    h('button',{className:'tbtn '+(erdMode?'on':''),title:'Toggle between graph view and ERD view',
+      'aria-pressed':erdMode,onClick:()=>onErdMode(!erdMode)},'Toggle ERD View'),
+    erdMode&&h('label',{className:'tbtn',title:'Show the most connected entities and their relationships',
+        style:{gap:5,cursor:'pointer',fontWeight:650,color:'var(--muted)'}},
+      h('input',{type:'checkbox',checked:erdCoreOnly,
+        onChange:e=>onErdCoreOnly(e.target.checked),
+        style:{cursor:'pointer',margin:0}}),
+      'Core entities'),
     h('label',{className:'tbtn',title:'Show domain grouping boxes',
         style:{gap:5,cursor:'pointer',fontWeight:650,color:'var(--muted)'}},
       h('input',{type:'checkbox',checked:showDomains,
@@ -1896,7 +1948,7 @@ function GraphViewToggles({showDomains,onShowDomains,animate,onAnimate}){
    then the searchable industry picker and every control. `actions` carries the
    graph buttons so this stays presentational and App keeps the cytoscape refs. */
 function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,onLoadJson,
-  showDomains,onShowDomains,animate,onAnimate,actions}){
+  showDomains,onShowDomains,animate,onAnimate,erdMode,onErdMode,actions}){
   const gallery=!!manifest;
   const industry=gallery&&sel.industry?findIndustry(manifest,sel.industry):null;
   const versions=industry?(industry.versions||[]).map(v=>v.version):[];
@@ -2005,7 +2057,7 @@ function TopBar({manifest,sel,onSelect,onJump,graphData,loadStatus,localModel,on
         onChange:e=>onSelect({version:e.target.value})},
         versions.map(v=>h('option',{key:v,value:v},v.toUpperCase()))
       ),
-      graphData&&h(GraphViewToggles,{showDomains,onShowDomains,animate,onAnimate}),
+      graphData&&h(GraphViewToggles,{showDomains,onShowDomains,animate,onAnimate,erdMode,onErdMode}),
       actions
     )
   );
@@ -2204,6 +2256,545 @@ function Tour({onClose,getNodeRect}){
   );
 }
 
+/* ── SQL-DBM style orthogonal connector routing ──────────────
+   Relationship lines never cross a table. Every card is inflated by a
+   clearance pad, the free space around them becomes a Hanan grid (one channel
+   per inflated card edge, plus a few evenly spaced ones inside each gutter),
+   grid segments that cut through a card are struck out, and a line is drawn
+   along what is left. Most links get the two-corner "out, across, in" route
+   SQL DBM favours; anything that has no clear column falls back to an A*
+   search over the same grid. Corners and already-used channel segments both
+   cost extra, so routes stay straight and parallel runs fan out across the
+   gutter instead of stacking into one thick smear. */
+const ERD_PAD=18;        // clearance between a card and the nearest channel
+const ERD_STUB=30;       // straight run off the card edge before the first turn
+const ERD_BEND=60;       // cost of a corner, expressed in pixels of detour
+const ERD_REUSE=45;      // cost of sharing one channel segment with another line
+const ERD_REUSE_CAP=3;   // past this many sharers a channel stops getting worse,
+                         // so a saturated diagram degrades into neat bundles
+                         // rather than into ever wilder detours
+const ERD_MARGIN=40;     // routable space outside the outermost cards
+const ERD_RADIUS=8;      // corner rounding
+const ERD_DETOUR=2.4;    // reject a two-corner route this much longer than direct
+const ERD_BUDGET_MS=500; // once spent, remaining links skip the A* fallback
+const ERD_EPS=0.01;
+
+function erdUniq(values,lo,hi){
+  const seen=new Set(),out=[];
+  values.forEach(v=>{
+    if(!isFinite(v))return;
+    const r=Math.round(Math.min(hi,Math.max(lo,v))*2)/2;
+    if(!seen.has(r)){seen.add(r);out.push(r);}
+  });
+  return out.sort((a,b)=>a-b);
+}
+
+// Widen the grid inside real gutters so several lines can run side by side.
+// Gaps wider than maxGap are card interiors and get no extra channels.
+function erdFill(sorted,maxGap){
+  const out=[];
+  for(let i=0;i<sorted.length;i++){
+    out.push(sorted[i]);
+    if(i+1>=sorted.length)continue;
+    const gap=sorted[i+1]-sorted[i];
+    if(gap<=14||gap>maxGap)continue;
+    const steps=Math.min(5,Math.floor(gap/12));
+    for(let s=1;s<steps;s++)out.push(sorted[i]+gap*s/steps);
+  }
+  return out;
+}
+
+function erdUpper(arr,v){ // index of the first entry strictly greater than v
+  let lo=0,hi=arr.length;
+  while(lo<hi){const mid=(lo+hi)>>1;if(arr[mid]<=v)lo=mid+1;else hi=mid;}
+  return lo;
+}
+function erdNearest(arr,v){
+  const i=erdUpper(arr,v);
+  if(i===0)return 0;
+  if(i>=arr.length)return arr.length-1;
+  return (v-arr[i-1]<=arr[i]-v)?i-1:i;
+}
+
+function ErdHeap(){this.f=[];this.v=[];}
+ErdHeap.prototype.push=function(f,v){
+  const F=this.f,V=this.v;let i=F.length;F.push(f);V.push(v);
+  while(i>0){
+    const p=(i-1)>>1;
+    if(F[p]<=F[i])break;
+    const tf=F[p];F[p]=F[i];F[i]=tf;const tv=V[p];V[p]=V[i];V[i]=tv;i=p;
+  }
+};
+ErdHeap.prototype.pop=function(){
+  const F=this.f,V=this.v,top=V[0],lf=F.pop(),lv=V.pop();
+  if(F.length){
+    F[0]=lf;V[0]=lv;
+    let i=0;
+    for(;;){
+      const l=i*2+1,r=l+1;let m=i;
+      if(l<F.length&&F[l]<F[m])m=l;
+      if(r<F.length&&F[r]<F[m])m=r;
+      if(m===i)break;
+      const tf=F[m];F[m]=F[i];F[i]=tf;const tv=V[m];V[m]=V[i];V[i]=tv;i=m;
+    }
+  }
+  return top;
+};
+
+function erdBuildRouter(rects,anchors,bounds){
+  const xsRaw=[bounds.left,bounds.right],ysRaw=[bounds.top,bounds.bottom];
+  rects.forEach(r=>{
+    xsRaw.push(r.left-ERD_PAD,r.right+ERD_PAD);
+    ysRaw.push(r.top-ERD_PAD,r.bottom+ERD_PAD);
+  });
+  anchors.forEach(a=>{xsRaw.push(a.x);ysRaw.push(a.y);});
+  const xs=erdFill(erdUniq(xsRaw,bounds.left,bounds.right),260);
+  const ys=erdFill(erdUniq(ysRaw,bounds.top,bounds.bottom),260);
+  const nx=xs.length,ny=ys.length;
+  const hFree=new Uint8Array(ny*Math.max(1,nx-1)).fill(1);
+  const vFree=new Uint8Array(nx*Math.max(1,ny-1)).fill(1);
+  rects.forEach(r=>{
+    const L=r.left-ERD_PAD,R=r.right+ERD_PAD,T=r.top-ERD_PAD,B=r.bottom+ERD_PAD;
+    const j0=erdUpper(ys,T+ERD_EPS),j1=erdUpper(ys,B-ERD_EPS)-1;
+    const i0=Math.max(0,erdUpper(xs,L+ERD_EPS)-1),i1=Math.min(nx-2,erdUpper(xs,R-ERD_EPS)-1);
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)hFree[j*(nx-1)+i]=0;
+    const a0=erdUpper(xs,L+ERD_EPS),a1=erdUpper(xs,R-ERD_EPS)-1;
+    const b0=Math.max(0,erdUpper(ys,T+ERD_EPS)-1),b1=Math.min(ny-2,erdUpper(ys,B-ERD_EPS)-1);
+    for(let i=a0;i<=a1;i++)for(let j=b0;j<=b1;j++)vFree[i*(ny-1)+j]=0;
+  });
+  // running counts of struck-out segments, so "is this whole run clear?" is O(1)
+  const hBlock=new Int32Array(ny*nx),vBlock=new Int32Array(nx*ny);
+  for(let j=0;j<ny;j++){let acc=0;for(let i=0;i<nx-1;i++){if(!hFree[j*(nx-1)+i])acc++;hBlock[j*nx+i+1]=acc;}}
+  for(let i=0;i<nx;i++){let acc=0;for(let j=0;j<ny-1;j++){if(!vFree[i*(ny-1)+j])acc++;vBlock[i*ny+j+1]=acc;}}
+  const states=nx*ny*2;
+  return {xs,ys,nx,ny,hFree,vFree,hBlock,vBlock,
+    hUse:new Float32Array(hFree.length),vUse:new Float32Array(vFree.length),
+    dist:new Float64Array(states),prev:new Int32Array(states),
+    seen:new Int32Array(states),gen:0};
+}
+
+function erdRowClear(R,j,a,b){
+  const lo=Math.min(a,b),hi=Math.max(a,b);
+  return R.hBlock[j*R.nx+hi]-R.hBlock[j*R.nx+lo]===0;
+}
+function erdColClear(R,i,a,b){
+  const lo=Math.min(a,b),hi=Math.max(a,b);
+  return R.vBlock[i*R.ny+hi]-R.vBlock[i*R.ny+lo]===0;
+}
+function erdRowUse(R,j,a,b){
+  let sum=0;
+  for(let i=Math.min(a,b);i<Math.max(a,b);i++)sum+=Math.min(R.hUse[j*(R.nx-1)+i],ERD_REUSE_CAP);
+  return sum*ERD_REUSE;
+}
+function erdColUse(R,i,a,b){
+  let sum=0;
+  for(let j=Math.min(a,b);j<Math.max(a,b);j++)sum+=Math.min(R.vUse[i*(R.ny-1)+j],ERD_REUSE_CAP);
+  return sum*ERD_REUSE;
+}
+
+/* The common case: leave along the source row, drop down one clear column,
+   arrive along the target row. Two corners at most - the shape SQL DBM draws
+   for almost every relationship. Returns null when no column works, or when
+   the only one that does is a wild detour. */
+function erdStraightRoute(R,si,sj,ti,tj,maxDetour){
+  const {xs,ys,nx}=R;
+  const direct=Math.abs(xs[ti]-xs[si])+Math.abs(ys[tj]-ys[sj]);
+  let best=null;
+  for(let c=0;c<nx;c++){
+    if(!erdRowClear(R,sj,si,c))continue;
+    if(!erdRowClear(R,tj,c,ti))continue;
+    if(!erdColClear(R,c,sj,tj))continue;
+    const length=Math.abs(xs[c]-xs[si])+Math.abs(xs[ti]-xs[c])+Math.abs(ys[tj]-ys[sj]);
+    if(length>direct*maxDetour+ERD_STUB*4)continue;
+    const bends=(sj!==tj?(c!==si?1:0)+(c!==ti?1:0):0)*ERD_BEND;
+    const cost=length+bends+erdRowUse(R,sj,si,c)+erdRowUse(R,tj,c,ti)+erdColUse(R,c,sj,tj);
+    if(!best||cost<best.cost)best={c,cost};
+  }
+  if(!best)return null;
+  return [{x:xs[si],y:ys[sj],_i:si,_j:sj},{x:xs[best.c],y:ys[sj],_i:best.c,_j:sj},
+    {x:xs[best.c],y:ys[tj],_i:best.c,_j:tj},{x:xs[ti],y:ys[tj],_i:ti,_j:tj}];
+}
+
+/* Last resort when nothing else fits: hug the outside of the diagram. Both
+   stubs sit in a gutter, and the margin rows above and below every card are
+   clear by construction, so this almost always has somewhere to go. */
+function erdPerimeterRoute(R,si,sj,ti,tj){
+  const {xs,ys,ny}=R;
+  for(const jm of (sj+tj)/2<ny/2?[0,ny-1]:[ny-1,0]){
+    if(!erdColClear(R,si,sj,jm))continue;
+    if(!erdRowClear(R,jm,si,ti))continue;
+    if(!erdColClear(R,ti,jm,tj))continue;
+    return [{x:xs[si],y:ys[sj],_i:si,_j:sj},{x:xs[si],y:ys[jm],_i:si,_j:jm},
+      {x:xs[ti],y:ys[jm],_i:ti,_j:jm},{x:xs[ti],y:ys[tj],_i:ti,_j:tj}];
+  }
+  return null;
+}
+
+/* Fallback for links with no clear column: A* over the same grid. State is
+   (node, direction of arrival) so a corner can be priced. Both ends are
+   approached horizontally, because the stubs leave the card sideways. */
+function erdSolve(R,si,sj,ti,tj){
+  const {xs,ys,nx,ny,hFree,vFree,hUse,vUse,dist,prev,seen}=R;
+  if(nx<2||ny<2)return null;
+  const gen=++R.gen; // stamp instead of clearing three arrays per route
+  const goal=((tj*nx+ti)<<1),gx=xs[ti],gy=ys[tj];
+  const start=((sj*nx+si)<<1);
+  const heap=new ErdHeap();
+  dist[start]=0;prev[start]=-1;seen[start]=gen;
+  heap.push(Math.abs(xs[si]-gx)+Math.abs(ys[sj]-gy),start);
+  let found=false;
+  const done=new Set();
+  while(heap.f.length){
+    const s=heap.pop();
+    if(done.has(s))continue;
+    done.add(s);
+    if(s===goal){found=true;break;}
+    const d=s&1,n=s>>1,i=n%nx,j=(n-i)/nx,g=dist[s];
+    for(let k=0;k<4;k++){
+      const vertical=k>1,step=(k&1)?1:-1;
+      let ni=i,nj=j,seg,free,use;
+      if(vertical){
+        nj=j+step;
+        if(nj<0||nj>=ny)continue;
+        seg=i*(ny-1)+Math.min(j,nj);
+        free=vFree[seg];use=vUse[seg];
+      }else{
+        ni=i+step;
+        if(ni<0||ni>=nx)continue;
+        seg=j*(nx-1)+Math.min(i,ni);
+        free=hFree[seg];use=hUse[seg];
+      }
+      if(!free)continue;
+      const nd=vertical?1:0;
+      const len=vertical?Math.abs(ys[nj]-ys[j]):Math.abs(xs[ni]-xs[i]);
+      const ns=(((nj*nx+ni)<<1)|nd);
+      const cost=g+len+(nd===d?0:ERD_BEND)+Math.min(use,ERD_REUSE_CAP)*ERD_REUSE;
+      if(seen[ns]!==gen||cost<dist[ns]){
+        seen[ns]=gen;dist[ns]=cost;prev[ns]=s;
+        heap.push(cost+Math.abs(xs[ni]-gx)+Math.abs(ys[nj]-gy),ns);
+      }
+    }
+  }
+  if(!found)return null;
+  const points=[];
+  for(let s=goal;s>=0;s=prev[s]){
+    const n=s>>1,i=n%nx,j=(n-i)/nx;
+    points.push({x:xs[i],y:ys[j],_i:i,_j:j});
+    if(s===start)break;
+  }
+  return points.reverse();
+}
+
+// charge the channels a finished route took, so the next one spreads out
+function erdChargeRoute(R,points){
+  const {nx,ny,hUse,vUse}=R;
+  for(let p=1;p<points.length;p++){
+    const a=points[p-1],b=points[p];
+    if(a._j===b._j)for(let i=Math.min(a._i,b._i);i<Math.max(a._i,b._i);i++)hUse[a._j*(nx-1)+i]+=1;
+    else for(let j=Math.min(a._j,b._j);j<Math.max(a._j,b._j);j++)vUse[a._i*(ny-1)+j]+=1;
+  }
+}
+
+function erdSimplify(points){
+  const out=[];
+  points.forEach(p=>{
+    const n=out.length;
+    if(n&&Math.abs(out[n-1].x-p.x)<0.01&&Math.abs(out[n-1].y-p.y)<0.01)return;
+    if(n>1){
+      const a=out[n-2],b=out[n-1];
+      const collinear=(Math.abs(a.x-b.x)<0.01&&Math.abs(b.x-p.x)<0.01)
+        ||(Math.abs(a.y-b.y)<0.01&&Math.abs(b.y-p.y)<0.01);
+      if(collinear){out[n-1]=p;return;}
+    }
+    out.push(p);
+  });
+  return out;
+}
+
+function erdPathD(points,radius){
+  if(!points.length)return '';
+  let d='M '+points[0].x+' '+points[0].y;
+  for(let i=1;i<points.length-1;i++){
+    const p=points[i],a=points[i-1],b=points[i+1];
+    const inLen=Math.abs(p.x-a.x)+Math.abs(p.y-a.y);
+    const outLen=Math.abs(b.x-p.x)+Math.abs(b.y-p.y);
+    const r=Math.min(radius,inLen/2,outLen/2);
+    if(r<1){d+=' L '+p.x+' '+p.y;continue;}
+    const ix=p.x+(a.x-p.x)/inLen*r,iy=p.y+(a.y-p.y)/inLen*r;
+    const ox=p.x+(b.x-p.x)/outLen*r,oy=p.y+(b.y-p.y)/outLen*r;
+    d+=' L '+ix+' '+iy+' Q '+p.x+' '+p.y+' '+ox+' '+oy;
+  }
+  const last=points[points.length-1];
+  return d+' L '+last.x+' '+last.y;
+}
+
+function SqlDbmErdView({graphData,filterState,erdCoreOnly,showDomains,erdZoom,selectedEdgeId,onTableClick,onEdgeClick}){
+  const canvasRef=useRef(null);
+  const surfaceRef=useRef(null);
+  const cardRefs=useRef({});
+  const rowRefs=useRef({});
+  const [lines,setLines]=useState([]);
+  const [expandedTables,setExpandedTables]=useState(new Set());
+
+  const modelTables=useMemo(()=>{
+    const result=[];
+    Object.entries(graphData.domainHierarchy||{}).forEach(([domainName,domainData])=>{
+      Object.entries(domainData.tables||{}).forEach(([tableName,tableData])=>{
+        result.push({...tableData,name:tableName,domain:domainName,
+          color:domainData.color||'var(--brand)',
+          id:tableData.full_id||`${domainName}.${tableName}`});
+      });
+    });
+    return result;
+  },[graphData]);
+
+  const visible={tables:[],edges:[]};
+  const degree={};
+  (graphData.edges||[]).forEach(edge=>{
+    degree[edge.data.source]=(degree[edge.data.source]||0)+1;
+    degree[edge.data.target]=(degree[edge.data.target]||0)+1;
+  });
+  const allIds=new Set(modelTables.map(table=>table.id));
+  let visibleIds=allIds;
+  if(erdCoreOnly){
+    visibleIds=new Set(modelTables.slice().sort((a,b)=>
+      (degree[b.id]||0)-(degree[a.id]||0)||a.id.localeCompare(b.id)
+    ).slice(0,Math.max(12,Math.ceil(modelTables.length*0.2))).map(table=>table.id));
+  }
+  const focusId=filterState.type==='table'?filterState.value:null;
+  if(focusId){
+    const directEdges=(graphData.edges||[]).filter(edge=>edge.data.source===focusId);
+    visibleIds=new Set([focusId,...directEdges.map(edge=>edge.data.target)]);
+  }
+  visible.tables=modelTables.filter(table=>visibleIds.has(table.id)).sort((a,b)=>{
+    if(focusId) {
+      if(a.id===focusId)return -1;
+      if(b.id===focusId)return 1;
+    }
+    return a.domain.localeCompare(b.domain)||a.name.localeCompare(b.name);
+  });
+  visible.edges=(graphData.edges||[]).filter(edge=>
+    visibleIds.has(edge.data.source)&&visibleIds.has(edge.data.target)
+  );
+
+  useLayoutEffect(()=>{
+    let frame=0;
+    const redraw=()=>{
+      const surface=surfaceRef.current;
+      if(!surface)return;
+      const surfaceRect=surface.getBoundingClientRect();
+      // the surface is CSS-scaled by erdZoom, but the SVG lives inside it and
+      // therefore draws in unscaled coordinates - divide the measurements back
+      const scale=surface.offsetWidth?surfaceRect.width/surface.offsetWidth:1;
+      const toLocal=(rect)=>({
+        left:(rect.left-surfaceRect.left)/scale,right:(rect.right-surfaceRect.left)/scale,
+        top:(rect.top-surfaceRect.top)/scale,bottom:(rect.bottom-surfaceRect.top)/scale});
+
+      const cardRects=[];
+      const cardById={};
+      Object.entries(cardRefs.current).forEach(([id,element])=>{
+        if(!element||!element.isConnected)return;
+        const rect={id,...toLocal(element.getBoundingClientRect())};
+        cardRects.push(rect);cardById[id]=rect;
+      });
+      if(!cardRects.length){setLines([]);return;}
+
+      const rowRect=(tableId,column)=>{
+        const element=column&&rowRefs.current[`${tableId}:${column}`];
+        return element&&element.isConnected?toLocal(element.getBoundingClientRect()):null;
+      };
+
+      // Work out where each line leaves its table. SQL DBM only ever attaches
+      // to the left or right edge of a row, so the line runs into the gutter
+      // immediately instead of climbing over the card.
+      const plans=visible.edges.map(edge=>{
+        const sourceCard=cardById[edge.data.source];
+        const targetCard=cardById[edge.data.target];
+        if(!sourceCard||!targetCard)return null;
+        const targetTable=modelTables.find(table=>table.id===edge.data.target);
+        const targetPk=targetTable&&(targetTable.attributes||[]).find(attribute=>attribute.pk);
+        const sourceRow=rowRect(edge.data.source,edge.data.source_column)||sourceCard;
+        const targetRow=rowRect(edge.data.target,edge.data.target_column)
+          ||(targetPk&&rowRect(edge.data.target,targetPk.name))||targetCard;
+        let sourceSide,targetSide;
+        if(targetCard.left>=sourceCard.right-1){sourceSide=1;targetSide=-1;}
+        else if(sourceCard.left>=targetCard.right-1){sourceSide=-1;targetSide=1;}
+        else{
+          // stacked in the same column: both ends leave on the roomier side
+          const side=(surface.clientWidth-Math.max(sourceCard.right,targetCard.right))
+            >=Math.min(sourceCard.left,targetCard.left)?1:-1;
+          sourceSide=side;targetSide=side;
+        }
+        const start={x:sourceSide>0?sourceCard.right:sourceCard.left,
+          y:(sourceRow.top+sourceRow.bottom)/2};
+        const end={x:targetSide>0?targetCard.right:targetCard.left,
+          y:(targetRow.top+targetRow.bottom)/2};
+        return {edge,start,end,
+          startStub:{x:start.x+sourceSide*ERD_STUB,y:start.y},
+          endStub:{x:end.x+targetSide*ERD_STUB,y:end.y}};
+      }).filter(Boolean);
+      if(!plans.length){setLines([]);return;}
+
+      const bounds={
+        left:Math.min(...cardRects.map(r=>r.left))-ERD_PAD-ERD_MARGIN,
+        right:Math.max(...cardRects.map(r=>r.right))+ERD_PAD+ERD_MARGIN,
+        top:Math.min(...cardRects.map(r=>r.top))-ERD_PAD-ERD_MARGIN,
+        bottom:Math.max(...cardRects.map(r=>r.bottom))+ERD_PAD+ERD_MARGIN};
+
+      const anchors=[];
+      plans.forEach(plan=>{anchors.push(plan.startStub,plan.endStub);});
+      const router=erdBuildRouter(cardRects,anchors,bounds);
+      const deadline=Date.now()+ERD_BUDGET_MS;
+
+      // Short links first: they have the least room to manoeuvre, and routing
+      // them before the long ones keeps them out of the far gutters.
+      const order=plans.map((plan,index)=>({plan,index})).sort((a,b)=>
+        (Math.abs(a.plan.startStub.x-a.plan.endStub.x)+Math.abs(a.plan.startStub.y-a.plan.endStub.y))
+        -(Math.abs(b.plan.startStub.x-b.plan.endStub.x)+Math.abs(b.plan.startStub.y-b.plan.endStub.y)));
+      const routed=new Array(plans.length);
+      order.forEach(({plan,index})=>{
+        const {start,end,startStub,endStub}=plan;
+        const si=erdNearest(router.xs,startStub.x),sj=erdNearest(router.ys,startStub.y);
+        const ti=erdNearest(router.xs,endStub.x),tj=erdNearest(router.ys,endStub.y);
+        // cheapest shape first, then progressively more desperate ones
+        let middle=erdStraightRoute(router,si,sj,ti,tj,ERD_DETOUR);
+        if(!middle&&Date.now()<deadline)middle=erdSolve(router,si,sj,ti,tj);
+        if(!middle)middle=erdStraightRoute(router,si,sj,ti,tj,Infinity);
+        if(!middle)middle=erdPerimeterRoute(router,si,sj,ti,tj);
+        if(middle)erdChargeRoute(router,middle);
+        else{
+          // nowhere clear at all: a plain Z, which is what the view had before
+          const midX=(startStub.x+endStub.x)/2;
+          middle=[startStub,{x:midX,y:startStub.y},{x:midX,y:endStub.y},endStub];
+        }
+        routed[index]=erdSimplify([start,startStub,...middle,endStub,end]);
+      });
+
+      // How much of a card the name chip would cover if parked here.
+      const covered=(cx,cy,w,h)=>cardRects.reduce((sum,rect)=>sum
+        +Math.max(0,Math.min(cx+w/2,rect.right)-Math.max(cx-w/2,rect.left))
+        *Math.max(0,Math.min(cy+h/2,rect.bottom)-Math.max(cy-h/2,rect.top)),0);
+
+      const next=plans.map((plan,index)=>{
+        const points=routed[index];
+        const name=plan.edge.data.source_column||plan.edge.data.label||'';
+        const chipW=name.length*5.72+9,chipH=14;
+        // Slide the name along every straight run and keep the spot that
+        // buries the least card. Free space wins - a gutter, the margin the
+        // perimeter routes use - so names stay off the columns underneath.
+        const midX=(points[0].x+points[points.length-1].x)/2;
+        const midY=(points[0].y+points[points.length-1].y)/2;
+        let seat=null;
+        for(let i=1;i<points.length;i++){
+          const a=points[i-1],b=points[i];
+          const horizontal=Math.abs(a.y-b.y)<0.01;
+          const span=horizontal?Math.abs(b.x-a.x):Math.abs(b.y-a.y);
+          const room=horizontal?chipW:chipH;
+          const lo=Math.min(horizontal?a.x:a.y,horizontal?b.x:b.y)+room/2;
+          const hi=Math.max(horizontal?a.x:a.y,horizontal?b.x:b.y)-room/2;
+          const stops=span<=room?[(lo+hi)/2]:[0,1,2,3,4,5,6].map(t=>lo+(hi-lo)*t/6);
+          stops.forEach(at=>{
+            const cx=horizontal?at:a.x,cy=horizontal?a.y:at;
+            // a horizontal run reads better, and a name near the middle of the
+            // route is easier to tie back to it - both are gentle tie-breaks
+            const score=covered(cx,cy,chipW,chipH)
+              +(horizontal?0:120)
+              +(Math.abs(cx-midX)+Math.abs(cy-midY))*0.05;
+            if(!seat||score<seat.score)seat={cx,cy,score,horizontal};
+          });
+        }
+        if(!seat)seat={cx:midX,cy:midY,horizontal:true};
+        return {...plan.edge.data,points,d:erdPathD(points,ERD_RADIUS),
+          labelX:seat.cx,labelY:seat.cy,labelHoriz:seat.horizontal};
+      });
+      setLines(next);
+    };
+
+    const schedule=()=>{
+      if(frame)cancelAnimationFrame(frame);
+      frame=requestAnimationFrame(()=>{frame=0;redraw();});
+    };
+    redraw();
+    schedule(); // re-measure once the cards have settled (fonts, scrollbars)
+    window.addEventListener('resize',schedule);
+    const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(schedule):null;
+    if(observer&&surfaceRef.current)observer.observe(surfaceRef.current);
+    return()=>{
+      if(frame)cancelAnimationFrame(frame);
+      window.removeEventListener('resize',schedule);
+      if(observer)observer.disconnect();
+    };
+  },[graphData,filterState,erdCoreOnly,showDomains,expandedTables,visible.tables.length,visible.edges.length]);
+
+  const slots=[[1,2],[2,1],[2,3],[3,2],[1,1],[1,3],[3,1],[3,3]];
+  const dense=lines.length>36;
+  // SVG has no z-index, so the selected link is simply painted last
+  const painted=selectedEdgeId
+    ?[...lines.filter(e=>e.id!==selectedEdgeId),...lines.filter(e=>e.id===selectedEdgeId)]
+    :lines;
+  return h('div',{ref:canvasRef,style:{position:'absolute',inset:0,overflow:'auto',padding:focusId?'80px':'40px',background:'var(--bg)'}},
+    h('div',{ref:surfaceRef,style:{position:'relative',minWidth:focusId?'1060px':'900px',minHeight:focusId?'800px':'100%',transform:`scale(${erdZoom})`,transformOrigin:'top left'}},
+    // The link layer sits ABOVE the cards. Routes never run over a card, so
+    // nothing is hidden by this, and it is what makes a line clickable: the
+    // card grid is a full-bleed block that would otherwise swallow every
+    // click landing in a gutter. Only the fat transparent hit strokes take
+    // pointer events; the rest of the layer stays inert.
+    h('svg',{className:'erd-layer'+(dense?' erd-dense':''),
+      style:{position:'absolute',inset:0,width:'100%',height:'100%',overflow:'visible',pointerEvents:'none',zIndex:3}},
+      h('defs',null,
+        h('marker',{id:'erd-many',viewBox:'0 0 12 12',refX:10,refY:6,markerWidth:8,markerHeight:8,orient:'auto-start-reverse'},
+          h('path',{d:'M10 1L2 6L10 11',fill:'none',stroke:'var(--flow-neutral)',strokeWidth:1.5})),
+        h('marker',{id:'erd-one',viewBox:'0 0 12 12',refX:10,refY:6,markerWidth:8,markerHeight:8,orient:'auto'},
+          h('path',{d:'M3 1V11',stroke:'var(--flow-neutral)',strokeWidth:1.5})),
+        h('marker',{id:'erd-many-hi',viewBox:'0 0 12 12',refX:10,refY:6,markerWidth:8,markerHeight:8,orient:'auto-start-reverse'},
+          h('path',{d:'M10 1L2 6L10 11',fill:'none',stroke:'var(--brand)',strokeWidth:2})),
+        h('marker',{id:'erd-one-hi',viewBox:'0 0 12 12',refX:10,refY:6,markerWidth:8,markerHeight:8,orient:'auto'},
+          h('path',{d:'M3 1V11',stroke:'var(--brand)',strokeWidth:2}))
+      ),
+      painted.map(edge=>{
+        const name=edge.source_column||edge.label||'';
+        // monospace, so the chip can be sized from the character count
+        const chipW=name.length*5.72+9,chipH=14;
+        const cx=edge.labelX,cy=edge.labelY;
+        return h('g',{key:edge.id,className:'erd-conn'+(edge.id===selectedEdgeId?' sel':'')},
+          h('path',{className:'erd-hit',d:edge.d,role:'button',
+            'aria-label':`Relationship ${edge.source_table}.${edge.source_column} to ${edge.target_table}.${edge.target_column||''}`,
+            onClick:e=>{e.stopPropagation();onEdgeClick(edge);}},
+            h('title',null,`${edge.source_table}.${edge.source_column} \u2192 ${edge.target_table}.${edge.target_column||''}`)),
+          h('path',{className:'erd-link',d:edge.d,
+            markerStart:'url(#erd-many)',markerEnd:'url(#erd-one)'}),
+          name&&h('g',{className:'erd-tag'},
+            h('rect',{className:'erd-chip',x:cx-chipW/2,y:cy-chipH/2,width:chipW,height:chipH,rx:3}),
+            h('text',{className:'erd-label',x:cx,y:cy,textAnchor:'middle'},name))
+        );
+      })
+    ),
+    h('div',{style:{position:'relative',zIndex:2,display:'grid',gridTemplateColumns:focusId?'repeat(3,minmax(300px,340px))':'repeat(auto-fill,minmax(300px,340px))',gap:focusId?'72px':'52px 72px',alignItems:'start',justifyContent:focusId?'center':'start'}},
+      visible.tables.map((table,index)=>{
+        const attrs=table.attributes||[];
+        const expanded=expandedTables.has(table.id);
+        const shownAttrs=expanded?attrs:attrs.filter((attr,attrIndex)=>attrIndex<6||attr.pk||attr.fk);
+        const hiddenCount=attrs.length-shownAttrs.length;
+        const slot=focusId?(table.id===focusId?[2,2]:slots[(index-1)%slots.length]):null;
+        return h('div',{key:table.id,ref:element=>{cardRefs.current[table.id]=element;},style:{gridColumn:slot&&slot[0],gridRow:slot&&slot[1],background:'var(--card)',border:`2px solid ${table.color}`,borderRadius:5,boxShadow:'var(--shadow-lg)',overflow:'hidden',cursor:'pointer',minWidth:300},onClick:()=>onTableClick(table.id)},
+          showDomains&&h('div',{style:{padding:'5px 12px 0',background:'var(--well)',fontSize:9,color:'var(--muted)',fontWeight:650}},table.domain.replace(/_/g,' ').toUpperCase()),
+          h('div',{style:{padding:'9px 12px',background:'var(--well)',borderBottom:'1px solid var(--line-strong)',fontSize:13,fontWeight:750,color:'var(--ink)',letterSpacing:'.03em'}},table.name.toUpperCase()),
+          h('div',null,shownAttrs.map(attr=>{
+            const marker=attr.pk?'PK':attr.fk?'FK':'';
+            return h('div',{key:attr.name,ref:element=>{rowRefs.current[`${table.id}:${attr.name}`]=element;},style:{display:'grid',gridTemplateColumns:'28px minmax(0,1fr) auto',gap:5,alignItems:'center',padding:'5px 10px',borderBottom:'1px solid var(--veil)',fontFamily:'monospace',fontSize:10}},
+              h('span',{style:{color:attr.pk?'var(--m-gold)':attr.fk?'var(--danger)':'transparent',fontWeight:750}},marker),
+              h('span',{style:{color:'var(--ink)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},attr.name),
+              h('span',{style:{color:'var(--g-amber-line)',whiteSpace:'nowrap'}},attr.type||'UNKNOWN')
+            );
+          }),
+          hiddenCount>0&&h('button',{type:'button',style:{width:'100%',padding:'6px 10px',border:0,borderTop:'1px solid var(--line)',background:'transparent',color:'var(--brand)',fontSize:10,cursor:'pointer',textAlign:'left'},onClick:e=>{e.stopPropagation();setExpandedTables(current=>{const next=new Set(current);if(next.has(table.id))next.delete(table.id);else next.add(table.id);return next;});}},expanded?`Show fewer columns`:`Show ${hiddenCount} more columns`))
+        );
+      })
+    )
+    )
+  );
+}
+
 function App(){
   // Graph state
   const [graphData,setGraphData]=useState(null);
@@ -2220,6 +2811,9 @@ function App(){
 
   // UI state
   const [showDomains,setShowDomains]=useState(true);
+  const [erdMode,setErdMode]=useState(false);
+  const [erdCoreOnly,setErdCoreOnly]=useState(false);
+  const [erdZoom,setErdZoom]=useState(1);
   const [animate,setAnimate]=useState(currentAnimate);
   const [sizeScale,setSizeScale]=useState(1.0);
   const [filterState,setFilterState]=useState({type:null,value:null});
@@ -2609,6 +3203,32 @@ function App(){
     const viewKey=type?`${type}:${typeof value==='object'?JSON.stringify(value):value}`:'main';
     const curSizes=(domainSizes[viewKey]||{});
 
+    if(erdMode){
+      const tableNodes=nodes.filter(n=>n.data&&n.data.type==='table');
+      const degree={};
+      edges.forEach(e=>{
+        degree[e.data.source]=(degree[e.data.source]||0)+1;
+        degree[e.data.target]=(degree[e.data.target]||0)+1;
+      });
+      const coreIds=new Set(tableNodes.slice().sort((a,b)=>{
+        const score=(degree[b.data.id]||0)-(degree[a.data.id]||0);
+        return score||String(a.data.label).localeCompare(String(b.data.label));
+      }).slice(0,Math.max(12,Math.ceil(tableNodes.length*0.2))).map(n=>n.data.id));
+      let visibleIds=erdCoreOnly?coreIds:new Set(tableNodes.map(n=>n.data.id));
+      let focusId=null;
+      if(type==='table'&&value){
+        focusId=value;
+        const focusEdges=edges.filter(e=>e.data.source===focusId);
+        visibleIds=new Set([focusId,...focusEdges.map(e=>e.data.target)]);
+      }
+      const erdNodes=tableNodes.filter(n=>visibleIds.has(n.data.id)).map(n=>{
+        const {parent,...data}=n.data||{};
+        return {...n,data,classes:'table-node erd-node'+(n.data.id===focusId?' erd-center-node':'')};
+      });
+      const erdEdges=edges.filter(e=>visibleIds.has(e.data.source)&&visibleIds.has(e.data.target));
+      return [...erdNodes,...erdEdges.map(e=>focusId?{...e,classes:'fk-edge erd-focus-edge'}:e)];
+    }
+
     // Apply domain sizes to domain nodes
     const applyDomainSizes=(els)=>els.map(el=>{
       if(el.data&&el.data.type==='domain'){
@@ -2757,7 +3377,7 @@ function App(){
       return n;
     });
     return [...allNodes,...edges];
-  },[graphData,graphIndexes,filterState,domainSizes]);
+  },[graphData,graphIndexes,filterState,domainSizes,erdMode,erdCoreOnly]);
 
   // ── Push elements to Cytoscape ─────────────────────────
   useEffect(()=>{
@@ -2780,7 +3400,28 @@ function App(){
       cy.add(paintElements(validElements,resolveTheme()));
     });
     // Choose layout strategy
-    if(!type){
+    if(erdMode){
+      const erdNodes=cy.nodes('.erd-node').sort((a,b)=>{
+        const da=(a.data('domain')||''), db=(b.data('domain')||'');
+        if(da!==db) return da<db?-1:1;
+        const la=(a.data('label')||''), lb=(b.data('label')||'');
+        return la<lb?-1:la>lb?1:0;
+      });
+      const focusNode=cy.nodes('.erd-center-node');
+      if(focusNode.length){
+        focusNode.position({x:0,y:0});
+        const related=erdNodes.difference(focusNode);
+        const radius=Math.max(420,related.length*110);
+        related.forEach((node,i)=>{
+          const angle=(2*Math.PI*i/Math.max(1,related.length))-(Math.PI/2);
+          node.position({x:radius*Math.cos(angle),y:radius*Math.sin(angle)});
+        });
+      } else {
+        const cols=Math.max(1,Math.ceil(Math.sqrt(erdNodes.length)));
+        const colWidth=300, rowHeight=180;
+        erdNodes.forEach((node,i)=>node.position({x:(i%cols)*colWidth,y:Math.floor(i/cols)*rowHeight}));
+      }
+    } else if(!type){
       // Circular grouped by domain — tables stay compound children so dragging a box moves them
       const tblNodes=cy.nodes('.table-node').sort((a,b)=>{
         const da=(a.data('domain')||''), db=(b.data('domain')||'');
@@ -2857,7 +3498,7 @@ function App(){
     // destination, nor once the viewer has taken the viewport. The view is only
     // marked as introduced once a move actually starts, so a fit that landed on a
     // not-yet-measured viewport leaves the next one free to try again.
-    const viewKey=`${type||''}::${filterState.value||''}`;
+    const viewKey=`${erdMode?'erd:':''}${type||''}::${filterState.value||''}`;
     const introduced=()=>lastFitKeyRef.current.graph===graphData&&lastFitKeyRef.current.key===viewKey;
     const mark=()=>{lastFitKeyRef.current={graph:graphData,key:viewKey};};
     const camFree=()=>!viewerTookOverRef.current&&(!introRef.current||introRef.current.finished);
@@ -2965,15 +3606,16 @@ function App(){
       onJump:openCmd,
       onLoadJson:handleLoadJsonFile,
       showDomains,onShowDomains:setShowDomains,animate,onAnimate:setAnimate,
+      erdMode,onErdMode:setErdMode,erdCoreOnly,onErdCoreOnly:setErdCoreOnly,
       actions:h(React.Fragment,null,
         // Graph controls do nothing without a graph, so they stay hidden until
         // one is loaded rather than sitting there inert.
         graphData&&h(React.Fragment,null,
           h('button',{className:'tbtn icononly',title:'Zoom out','aria-label':'Zoom out',
-            onClick:()=>cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*0.8)},
+            onClick:()=>erdMode?setErdZoom(z=>Math.max(0.5,z*0.8)):cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*0.8)},
             h(ToolbarIcon,{name:'zoomOut'})),
           h('button',{className:'tbtn icononly',title:'Zoom in','aria-label':'Zoom in',
-            onClick:()=>cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*1.25)},
+            onClick:()=>erdMode?setErdZoom(z=>Math.min(2.5,z*1.25)):cyRef.current&&cyRef.current.zoom(cyRef.current.zoom()*1.25)},
             h(ToolbarIcon,{name:'zoomIn'})),
           h('button',{className:'tbtn icononly',title:'Decrease node and label size','aria-label':'Decrease font size',
             onClick:()=>setSizeScale(s=>Math.max(0.5,s-0.2))},
@@ -2982,7 +3624,7 @@ function App(){
             onClick:()=>setSizeScale(s=>Math.min(3,s+0.2))},
             h(ToolbarIcon,{name:'fontUp'})),
           h('button',{className:'tbtn icononly',title:'Fit graph to view','aria-label':'Fit to view',
-            onClick:()=>cyRef.current&&cyRef.current.fit(50)},
+            onClick:()=>erdMode?setErdZoom(1):cyRef.current&&cyRef.current.fit(50)},
             h(ToolbarIcon,{name:'fit'}))
         ),
         gallery&&graphData&&h('button',{className:'iconbtn',title:'Take a guided tour','aria-label':'Take a guided tour',
@@ -3097,8 +3739,13 @@ function App(){
           )
         ),
 
-        // Cytoscape container
-        h('div',{ref:containerRef,style:{width:'100%',height:'100%',display:graphData?'block':'none'}})
+        // Traditional ERD uses real DOM table cards so columns stay aligned and
+        // the relationship layer can terminate against the visible cards.
+        erdMode&&graphData&&h(SqlDbmErdView,{graphData,filterState,erdCoreOnly,showDomains,erdZoom,
+          selectedEdgeId:selectedEdge&&selectedEdge.id,
+          onTableClick:handleClickTable,
+          onEdgeClick:data=>{setSelectedEdge(data);setSelectedNode(null);setTreeClick(null);}}),
+        h('div',{ref:containerRef,style:{width:'100%',height:'100%',display:graphData&&!erdMode?'block':'none'}})
       ),
 
       // Right panel

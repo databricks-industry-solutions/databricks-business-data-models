@@ -87,6 +87,11 @@ The fastest way to explore a model visually is the **model-viewer app**, a **Dat
 | **Domain drill-down** | Click a domain to zoom into its sub-domains and products, FK web restricted to within-domain links. ![Domain drill-down — order domain in Retail MVM](./data-models/images/order_domain.png) |
 | **Single-product radial** | Click a product to centre it; every related product fans out by domain, showing every join path. ![Single-product radial view — order.order_line in Retail MVM](./data-models/images/order_line_product.png) |
 
+**ERD view** — **Toggle ERD View** in the toolbar redraws the same model as a classic entity-relationship diagram: every entity a card listing its columns with `PK` and `FK` markers and the declared type, and every foreign key drawn as an orthogonal connector routed around the cards rather than across them, with a crow's foot at the many end. A card shows its first six columns plus every key and reference; **Show N more columns** opens the rest. Clicking a card or a connector fills the details panel exactly as clicking a node in the graph does, and the toolbar's zoom controls scale the diagram, so the two views stay interchangeable — the graph for shape and scale, the ERD for reading columns and join keys.
+
+**Core entities** narrows a large model to the most connected fifth of its entities (at least twelve) and the relationships between them, which is usually the readable starting point on a full ECM. The ERD also honours wherever you have navigated to: drill into a domain and switch to ERD and you get an ERD of that domain, and clicking a single entity centres it with everything it references around it.
+
+
 ### Deploying a model into Unity Catalog
 
 The **[`model-installer/data-model-installer.ipynb`](./model-installer/data-model-installer.ipynb)** notebook installs any model — catalog, schemas, tables, foreign keys, governance tags, and metric views — with a single `Run All`. It is Databricks Serverless compatible, resolves the latest version of a model automatically, and can render the same logical model as one catalog, a catalog per division, or a catalog per domain.
