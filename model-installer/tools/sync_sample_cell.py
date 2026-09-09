@@ -6,7 +6,7 @@ workspace, with no repo checkout), so the engine cannot be imported at runtime. 
 therefore edited as a normal Python file here and injected verbatim as one cell; a test
 asserts the two never drift.
 
-    python3 model-installer/sync_sample_cell.py [--check]
+    python3 model-installer/tools/sync_sample_cell.py [--check]
 """
 import json
 import re
@@ -15,7 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ENGINE = HERE / "sample_engine.py"
-NOTEBOOK = HERE / "data-model-installer.ipynb"
+NOTEBOOK = HERE.parent / "data-model-installer.ipynb"
 MARKER = "# === Sample data generation (self-contained; reads the installed catalog) ==="
 
 # Anchored on the widget NAME, not its label: the labels carry a display ordinal that

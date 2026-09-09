@@ -7,7 +7,7 @@ notebook already carries the patch.
 import json
 from pathlib import Path
 
-NB = Path(__file__).resolve().parent / "data-model-installer.ipynb"
+NB = Path(__file__).resolve().parent.parent / "data-model-installer.ipynb"
 
 
 def cell_source(cell):
