@@ -1,12 +1,12 @@
 """Bring the installer notebook's own documentation in line with the sample widgets.
 
-Run from the repo root: python3 model-installer/patch_docs.py
+Run from the repo root: python3 model-installer/tools/patch_docs.py
 """
 import json
 import pathlib
 import sys
 
-NB = pathlib.Path(__file__).resolve().parent / "data-model-installer.ipynb"
+NB = pathlib.Path(__file__).resolve().parent.parent / "data-model-installer.ipynb"
 
 WIDGET_TABLE_OLD = """## Parameters (widgets)
 

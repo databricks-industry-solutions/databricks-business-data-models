@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-INSTALLER = HERE.parent / "data-model-installer.ipynb"
+INSTALLER = HERE.parent.parent / "data-model-installer.ipynb"
 ENGINE = HERE.parent / "sample_engine.py"
 
 
