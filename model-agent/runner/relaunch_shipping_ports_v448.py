@@ -2,7 +2,7 @@
 """v4.4.8 shipping_ports VOV relaunch on the idle, isolated fe-gcp workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md 3d) to run shipping_ports v1 ECM -> v2 ECM -> v2 MVM with
-the merged USER-KING reviewer next_vibes (Ahmed Elmaadawy / DP World review, R1-R9) on the LATEST fixed
+the merged USER-KING reviewer next_vibes (SME review, R1-R9) on the LATEST fixed
 agent v4.4.8. The critical v4.4.8 fix here is GAP-5 (verifier-product-create-coverage +
 vov-preskip-productcreate-guard): the deterministic "ALREADY FULFILLED" pre-skip no longer false-positives
 on generative add_product VREQs when the concept token merely appears as an existing column/measure/flag

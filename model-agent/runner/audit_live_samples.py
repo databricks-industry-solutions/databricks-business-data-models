@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vov_v2_marathon as M
 
-M.WAREHOUSE.setdefault("my-adp", "2ad1b26db73a7c6f")
+M.WAREHOUSE.setdefault("my-adp", "<WAREHOUSE_ID>")
 
 TEMPORAL_ORDER_PAIRS = [
     ("valid_from", "valid_to"), ("effective", "expir"), ("effective", "end"),

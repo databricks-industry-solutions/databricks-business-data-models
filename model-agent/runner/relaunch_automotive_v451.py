@@ -2,7 +2,7 @@
 """v4.5.1 automotive VOV regen on the idle, isolated fe-aws workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md 3d) to run automotive v1 ECM -> v2 ECM -> v2 MVM with the
-merged USER-KING reviewer next_vibes (Max Koehler value-chain review) on the LATEST fixed agent v4.5.1.
+merged USER-KING reviewer next_vibes (SME value-chain review) on the LATEST fixed agent v4.5.1.
 The v4.5.1 fix that matters here is G7 (v443-silo-inbound-relink + v443-silo-selffk-exclude): the FK-linker
 now wires INBOUND FKs into siloed hierarchical/geographic reference dims (customer.organization_account,
 aftersales.aftersales_market) instead of trying wrong OUTBOUND FKs -> 0 silos -> ECM 12/12. Target: 8/8

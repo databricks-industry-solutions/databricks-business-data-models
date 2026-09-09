@@ -296,8 +296,8 @@ A **zero-shot Value-Oriented-Vibe (VOV)** pass over three businesses, all readin
 
 | Business | Catalog | Scope | Vibe source | Vibe length | Run ID |
 |---|---|---|---|---|---|
-| Healthcare | `healthcare_ecm_v1` | ECM | Google Doc (Muhammad Zahid review) | 16,755 chars | `616275845264216` (run #2 after scope-label fix; run #1 `980906059755192` FAILED at 06:55 — see §12) |
-| Retail | `retail_mvm_v1` | MVM | Google Doc (Ruslan Dautkhanov critique) | 14,148 chars | `755132864379742` |
+| Healthcare | `healthcare_ecm_v1` | ECM | Google Doc (SME review) | 16,755 chars | `616275845264216` (run #2 after scope-label fix; run #1 `980906059755192` FAILED at 06:55 — see §12) |
+| Retail | `retail_mvm_v1` | MVM | Google Doc (SME critique) | 14,148 chars | `755132864379742` |
 | gov_transport | `gov_transport_v1` | MVM | Original gov_transport base-model vibe doc | 21,781 chars | `700767918309955` |
 
 The full vibe canvas the agent sees for each run =
@@ -524,8 +524,8 @@ For each surfaced issue:
 | `/tmp/v200/v206_with_vibes_watcher.sh` | The watcher script |
 | `/tmp/v200/v206_with_vibes_logs/<BIZ>__*.log` | Mirrored volume logs, updated every pulse |
 | `/tmp/v200/v206_deployed_check.ipynb` | Exported copy of the deployed v206 archive (for offline grep verification) |
-| `/tmp/v200/vibe_doc_HC_text.md` | Markdown extract of the HC Google Doc (Muhammad Zahid review) — used as `model_vibes` |
-| `/tmp/v200/vibe_doc_RT_text.md` | Markdown extract of the RT Google Doc (Ruslan Dautkhanov critique) — used as `model_vibes` |
+| `/tmp/v200/vibe_doc_HC_text.md` | Markdown extract of the HC Google Doc (SME review) — used as `model_vibes` |
+| `/tmp/v200/vibe_doc_RT_text.md` | Markdown extract of the RT Google Doc (SME critique) — used as `model_vibes` |
 | `/tmp/v200/vibe_doc_HC_raw.json` / `_RT_raw.json` | Raw Google Docs API responses (in case extraction needs to be redone) |
 
 ### 7.2 Databricks workspace artifacts

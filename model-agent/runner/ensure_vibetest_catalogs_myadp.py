@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vov_v2_marathon as M
 
 PROFILE = "my-adp"
-M.WAREHOUSE[PROFILE] = "2ad1b26db73a7c6f"
-preferred = "abfss://unity-catalog-storage@dbstoragem6ow6jhr3huvi.dfs.core.windows.net/7405617889454112"
+M.WAREHOUSE[PROFILE] = "<WAREHOUSE_ID>"
+preferred = "abfss://unity-catalog-storage@<STORAGE_ACCOUNT>.dfs.core.windows.net/<CONTAINER_ID>"
 bases = M._external_location_bases(PROFILE) + M._managed_bases(PROFILE)
 cand = [preferred] + [b for b in bases if b != preferred]
 

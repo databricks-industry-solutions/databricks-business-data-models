@@ -3,7 +3,7 @@
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md §3d) to run the automotive
 v1 ECM -> v2 ECM -> v2 MVM pipeline with the merged USER-KING reviewer
-next_vibes (Max Koehler value-chain review), fully isolated from the
+next_vibes (SME value-chain review), fully isolated from the
 in-flight retail run (retail is on fe-gcp/my-uae; automotive uses fe-aws,
 separate metastore, catalog vibe_automotive_v1 -> no collision).
 

@@ -1,8 +1,8 @@
 ================================================================================
 USER-KING REVIEWER DIRECTIVES - SUPREME AUTHORITY (CLAUDE.md §3c)
-Source: Human SME review of Shipping & Ports v1 by Ahmed Elmaadawy (DP World),
+Source: Human SME review of Shipping & Ports v1,
 reviewer doc "Shipping & Ports Data Model - Review Comments", recorded in the
-"Active Vibe Models Enriched" tracking sheet (Reviewer Notes, gid=757668078).
+"Active Vibe Models Enriched" tracking sheet (Reviewer Notes).
 These reviewer requirements OUTRANK every heuristic, score, and LLM opinion.
 Apply ALL of them to the ECM (and carry them through to the MVM on shrink).
 Where a directive conflicts with an agent auto-priority below, the REVIEWER WINS.

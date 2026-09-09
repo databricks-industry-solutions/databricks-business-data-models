@@ -1,4 +1,4 @@
-"""v4.6.8 behavioral tests for the three root-cause fixes shipped after the WCB
+"""v4.6.8 behavioral tests for the three root-cause fixes shipped after the customer
 Alberta v4.6.7 FAILED run (missing=['workforce_case_officer_assignment'] + R3 log
 clobber + false-red FK ERROR spam).
 
@@ -138,7 +138,7 @@ def test_extract_source_unquoted_failpre():
 # FIX B-2  mv-source-derive-physical                                          #
 # --------------------------------------------------------------------------- #
 def test_derive_source_from_physical_catalog():
-    """pass-post: the WCB failure MV name maps back to its real base table.
+    """pass-post: the customer failure MV name maps back to its real base table.
 
     The v4.6.7 fallback had NO way to find a source when extraction failed, so the
     MV stayed missing. The v4.6.8 derive helper matches <schema>_<table> == mv-name

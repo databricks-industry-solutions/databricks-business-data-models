@@ -54,7 +54,7 @@ CANDIDATE_PROFILES = [
 WAREHOUSE = {
     "my-uae": "0ece1cdc84e98661",
     "my-gcp": "2023d0a3a188bd24",
-    "my-adp": "2ad1b26db73a7c6f",
+    "my-adp": "<WAREHOUSE_ID>",
     "my-aws": "7c313dcbcd3119c1",
     "fe-aws": "862f1d757f0424f7",
     "fe-gcp": "d6d89fb9fd47b835",

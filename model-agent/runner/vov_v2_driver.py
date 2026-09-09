@@ -22,7 +22,7 @@ M.WAREHOUSE = {
     "fe-adp": "148ccb90800933a1",
     "my-uae": "0ece1cdc84e98661",
     "my-gcp": "2023d0a3a188bd24",
-    "my-adp": "2ad1b26db73a7c6f",
+    "my-adp": "<WAREHOUSE_ID>",
     "my-aws": "7c313dcbcd3119c1",
 }
 M.FIXED_CATALOG = {}  # all assigned profiles are catalog-capable in this fleet
