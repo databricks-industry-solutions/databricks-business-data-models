@@ -2,7 +2,7 @@
 """v4.5.4 automotive VOV regen on the idle, isolated fe-aws workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md 3d) to run automotive v1 ECM -> v2 ECM -> v2 MVM with the
-merged USER-KING reviewer next_vibes (Max Koehler value-chain review) on the LATEST fixed agent v4.5.4.
+merged USER-KING reviewer next_vibes (SME value-chain review) on the LATEST fixed agent v4.5.4.
 
 v4.5.4 is the correct version for automotive: it carries the whole serialization-boundary hardening chain
 that automotive needs -- G7 silo-inbound-relink (v443, 0 silos -> ECM 12/12), the post-finalize cycle guard

@@ -2,7 +2,7 @@
 """v4.4.6 automotive VOV regen on the idle, isolated fe-aws workspace.
 
 Reuses the vov_v2_marathon helpers (CLAUDE.md §3d) to run automotive v1 ECM -> v2 ECM -> v2 MVM with
-the merged USER-KING reviewer next_vibes (Max Koehler value-chain review). Proves the v4.4.6 automotive
+the merged USER-KING reviewer next_vibes (SME value-chain review). Proves the v4.4.6 automotive
 capability gaps: GAP-1 (surgical-VOV outcome-scope guard whitelists a USER-KING new domain -> field_services
 + 12 products land), GAP-2 (connect FK re-scoped to the reviewer-named domain), GAP-3 (shrink force-keeps
 the reviewer keep-in-MVM procurement/mobility products), GAP-4 (ai_query None-timeout null-guard), on top of

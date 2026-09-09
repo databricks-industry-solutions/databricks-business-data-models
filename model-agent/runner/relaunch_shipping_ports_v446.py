@@ -2,7 +2,7 @@
 """v4.4.6 shipping_ports VOV relaunch on an idle, isolated workspace (fe-gcp).
 
 Reuses the vov_v2_marathon helpers (§3d) to run shipping_ports v1 ECM -> v2 ECM -> v2 MVM
-with the merged USER-KING reviewer next_vibes (Ahmed Elmaadawy / DP World review), consuming
+with the merged USER-KING reviewer next_vibes (SME review), consuming
 the LATEST fixed agent v4.4.6 (GAP-1 add_domain-with-products in surgical VOV scope) so the
 reviewer 'create sustainability domain with products' directive lands. Runs in parallel with
 the retail (my-uae) and automotive (fe-aws) siblings on a separate metastore/catalog

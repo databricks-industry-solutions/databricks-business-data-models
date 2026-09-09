@@ -10040,7 +10040,7 @@
                 "column_name": "prm_category",
                 "type": "STRING",
                 "business_glossary_term": "Passenger with Reduced Mobility (PRM) Category",
-                "description": "IATA standard PRM category code. WCHR=wheelchair for ramp, WCHS=wheelchair for stairs, WCHC=wheelchair for cabin seat, WCBD=dry cell battery wheelchair, WCBW=wet cell battery wheelchair, WCMP=manual wheelchair, BLND=blind, DEAF=deaf, DPNA=disabled passenger needing assistance, MAAS=meet and assist. [ENUM-REF-CANDIDATE: WCHR|WCHS|WCHC|WCBD|WCBW|WCMP|BLND|DEAF|DPNA|MAAS \u2014 10 candidates stripped; promote to reference product]",
+                "description": "IATA standard PRM category code. WCHR=wheelchair for ramp, WCHS=wheelchair for stairs, WCHC=wheelchair for cabin seat, customerD=dry cell battery wheelchair, customerW=wet cell battery wheelchair, WCMP=manual wheelchair, BLND=blind, DEAF=deaf, DPNA=disabled passenger needing assistance, MAAS=meet and assist. [ENUM-REF-CANDIDATE: WCHR|WCHS|WCHC|customerD|customerW|WCMP|BLND|DEAF|DPNA|MAAS \u2014 10 candidates stripped; promote to reference product]",
                 "value_regex": "",
                 "tags": "",
                 "foreign_key_to": "",

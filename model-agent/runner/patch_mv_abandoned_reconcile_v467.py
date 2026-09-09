@@ -6,7 +6,7 @@ Root cause (evidenced): _safe_as_completed catches TimeoutError, cancels unfinis
 futures, and stops yielding. Futures unfinished at pool_timeout were therefore never
 installed, never fallback-repaired, never appended to `failures`, yet `succeeded =
 total - len(failures)` counted them as succeeded — only to surface as `missing` at the
-physical-parity gate and hard-fail the whole run (WCB Alberta v4.6.6 run 908193301348249,
+physical-parity gate and hard-fail the whole run (customer ECM v4.6.6 run,
 missing=['claim_cost_summary','claim_eligibility_determination']).
 
 Fix (DRY, surgical):

@@ -6,7 +6,7 @@ _safe_as_completed catches TimeoutError, cancels the still-unfinished futures, a
 STOPS yielding. Any future unfinished at pool_timeout was therefore never installed,
 never fallback-repaired, never appended to `failures` -- yet `succeeded =
 total_statements - len(failures)` counted it as succeeded. The MV then surfaced as
-`missing` at the physical-parity gate and hard-failed the whole run (WCB Alberta
+`missing` at the physical-parity gate and hard-failed the whole run (a customer
 v4.6.6 run 908193301348249, missing=['claim_cost_summary','claim_eligibility_determination']).
 
 This test drives the REAL sliced function with a stubbed executor where exactly one

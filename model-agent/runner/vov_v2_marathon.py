@@ -84,7 +84,7 @@ WAREHOUSE = {
     "<profile>": "d6d89fb9fd47b835",
     "<profile>": "862f1d757f0424f7",
     "<profile>": "2023d0a3a188bd24",
-    "<profile>": "2ad1b26db73a7c6f",
+    "<profile>": "<WAREHOUSE_ID>",
     "my-uae": "6b2c33b3b2aae3ac",
     "<profile>": "7c313dcbcd3119c1",
 }

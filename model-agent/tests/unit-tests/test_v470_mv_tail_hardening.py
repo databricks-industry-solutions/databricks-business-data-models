@@ -1,6 +1,6 @@
 """v4.7.0 behavioral tests: metric-view TAIL hardening from the full-code audit.
 
-The last 3 WCB Alberta ECM runs (v4.6.7/8/9) all died in the MV-install/parity tail. A
+The last 3 a customer ECM runs (v4.6.7/8/9) all died in the MV-install/parity tail. A
 line-by-line audit of that tail found 4 impactful latent bugs. These tests prove each fix
 fail-pre/pass-post using the SAME working-tree source (no git dependency):
 

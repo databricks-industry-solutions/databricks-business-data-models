@@ -1,6 +1,6 @@
 ================================================================================
 USER-KING REVIEWER DIRECTIVES - SUPREME AUTHORITY (CLAUDE.md §3c)
-Source: Human SME review of Automotive v1 by Max Koehler (2026-05-23),
+Source: Human SME review of Automotive v1,
 "Feedback: Automotive Lakehouse Data Models - Value Chain Coverage Review",
 linked from the "Active Vibe Models Enriched" tracking sheet (Reviewer Notes).
 These reviewer requirements OUTRANK every heuristic, score, and LLM opinion.
